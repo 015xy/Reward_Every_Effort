@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="__DOCUMENT_LANG__">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Reward Every Effort</title>
+    <style>
+      __REPORT_CSS__
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <span class="brand">Reward Every Effort</span
+      ><span class="app-purpose" data-i18n="score_flow"></span>
+      <div class="header-actions">
+        <a id="alternate-language" hidden></a
+        ><button id="print" data-i18n="print"></button>
+      </div>
+    </header>
+    <main class="workbench" id="workbench">
+      <aside class="data-pane">
+        <div class="pane-title">
+          <h1 data-i18n="data_title"></h1>
+          <span id="query-count"></span>
+        </div>
+        <input id="query-search" type="search" />
+        <div id="query-list" class="query-list"></div>
+      </aside>
+      <div class="mobile-pane-switch" role="tablist">
+        <button
+          id="mobile-trace"
+          role="tab"
+          aria-controls="trace-pane"
+          data-i18n="trajectory"
+        ></button
+        ><button
+          id="mobile-score"
+          role="tab"
+          aria-controls="score-pane"
+          data-i18n="score_flow"
+        ></button>
+      </div>
+      <section class="trace-pane" id="trace-pane">
+        <header class="trace-header">
+          <h2 data-i18n="trajectory"></h2>
+          <span id="record-status" class="status"></span>
+          <p id="request-title"></p>
+          <div id="run-line"></div>
+        </header>
+        <div id="trace-content" class="trace-content"></div>
+      </section>
+      <aside class="score-pane" id="score-pane">
+        <header class="score-header">
+          <h2 data-i18n="score_flow"></h2>
+          <p data-i18n="pipeline_note"></p>
+        </header>
+        <div class="flow-diagram" id="flow-diagram" role="group">
+          <div class="flow-row">
+            <button id="flow-gate" data-stage="gate"></button>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-row">
+            <button id="flow-base" data-stage="base"></button>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-row split">
+            <button id="flow-deduction" data-stage="deduction"></button
+            ><button id="flow-bonus" data-stage="bonus"></button>
+          </div>
+          <div class="flow-connector"></div>
+          <div class="flow-row">
+            <button id="flow-reward" data-stage="reward"></button>
+          </div>
+        </div>
+        <div id="score-summary" class="score-summary"></div>
+        <div id="score-details" class="score-details">
+          <section id="stage-gate" class="stage-panel" hidden>
+            <h3 data-i18n="gate_detail"></h3>
+            <div id="gate-detail"></div>
+          </section>
+          <section id="stage-base" class="stage-panel" hidden>
+            <h3 data-i18n="base_detail"></h3>
+            <div id="subject-list" class="selection-list"></div>
+            <div id="subject-detail"></div>
+            <details class="calculation">
+              <summary data-i18n="base_averaging"></summary>
+              <div id="base-equations"></div>
+            </details>
+            <details class="calculation">
+              <summary data-i18n="lookup_reference"></summary>
+              <div class="table-viewport">
+                <table>
+                  <thead id="lookup-head"></thead>
+                  <tbody id="lookup-rows"></tbody>
+                </table>
+              </div>
+            </details>
+          </section>
+          <section id="stage-deduction" class="stage-panel" hidden>
+            <h3 data-i18n="quality_details"></h3>
+            <div id="quality-equations"></div>
+            <div id="group-list" class="group-list"></div>
+            <div id="group-detail"></div>
+            <div id="curve" class="curve"></div>
+            <details class="calculation">
+              <summary data-i18n="group_formula"></summary>
+              <div id="group-equations"></div>
+            </details>
+            <details class="calculation">
+              <summary data-i18n="criterion_details"></summary>
+              <div class="filters">
+                <input id="search" type="search" /><select
+                  id="status-filter"
+                ></select>
+              </div>
+              <p id="check-count" class="note"></p>
+              <div id="criterion-list" class="criterion-list"></div>
+            </details>
+          </section>
+          <section id="stage-bonus" class="stage-panel" hidden>
+            <h3 data-i18n="bonus_detail"></h3>
+            <div id="bonus-detail"></div>
+          </section>
+          <section id="stage-reward" class="stage-panel">
+            <h3 data-i18n="reward_formula"></h3>
+            <div id="reward-detail"></div>
+            <details class="calculation">
+              <summary data-i18n="metadata_toggle"></summary>
+              <pre id="metadata-content" class="trace-json"></pre>
+            </details>
+          </section>
+        </div>
+      </aside>
+    </main>
+    <script type="application/json" id="evaluation-record">
+      __RECORD_JSON__
+    </script>
+    <script type="application/json" id="ui-locale">
+      __LOCALE_JSON__
+    </script>
+    <script>
+      __REPORT_JS__
+    </script>
+  </body>
+</html>

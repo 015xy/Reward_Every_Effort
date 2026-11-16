@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reward-every-effort"
+version = "0.1.0"
+description = "General-purpose, evidence-based rewards for agent trajectories"
+readme = "docs/README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["docs/LICENSE"]
+dependencies = ["pydantic>=2.8,<3", "httpx>=0.27,<1", "PyYAML>=6,<7", "jsonschema>=4.23,<5", "referencing>=0.35,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.8"]
+
+[project.scripts]
+ree = "ree.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+packages = ["ree"]
+package-dir = {ree = "src"}
+
+[tool.setuptools.package-data]
+ree = ["data/general-agent/*.json", "data/general-agent/*.md", "data/general-agent/base/*.md", "data/general-agent/safety/*.md", "data/general-agent/tool_use/*.md", "data/general-agent/hallucination/*.md", "data/general-agent/format/*.md", "data/general-agent/gate/*.md", "data/general-agent/bonus/*.md", "web/*.html", "web/*.css", "web/*.js", "web/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]

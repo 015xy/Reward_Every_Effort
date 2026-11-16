@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "request": "Validate configurations A and B independently. Build each bundle from its validated configuration, then merge both bundles into a release. Return JSON with built, blocked and reason fields. Explain any missing deliverable.",
+  "response": "{\"built\":[\"B\"],\"blocked\":[\"A\",\"release\"],\"reason\":\"Configuration A is missing a required target; bundle B was built successfully.\"}",
+  "events": [
+    {
+      "ref": "validate-A",
+      "kind": "tool_call",
+      "tool": "validate",
+      "arguments": {
+        "name": "A"
+      }
+    },
+    {
+      "ref": "validate-A-result",
+      "kind": "tool_result",
+      "call_ref": "validate-A",
+      "tool": "validate",
+      "output": {
+        "valid": false,
+        "error": "Missing required target"
+      }
+    },
+    {
+      "ref": "validate-B",
+      "kind": "tool_call",
+      "tool": "validate",
+      "arguments": {
+        "name": "B"
+      }
+    },
+    {
+      "ref": "validate-B-result",
+      "kind": "tool_result",
+      "call_ref": "validate-B",
+      "tool": "validate",
+      "output": {
+        "valid": true
+      }
+    },
+    {
+      "ref": "build-B",
+      "kind": "tool_call",
+      "tool": "build",
+      "arguments": {
+        "name": "B"
+      }
+    },
+    {
+      "ref": "build-B-result",
+      "kind": "tool_result",
+      "call_ref": "build-B",
+      "tool": "build",
+      "output": {
+        "created": "bundle-B.zip"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "ref": "bundle-B",
+      "name": "bundle-B.zip manifest",
+      "content": "{\"source\":\"B\",\"files\":[\"app.js\"]}"
+    }
+  ],
+  "harness": {
+    "tools": [
+      {
+        "name": "validate",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "build",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "merge",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "context": {
+    "output_format": "json",
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "built": {
+          "type": "array"
+        },
+        "blocked": {
+          "type": "array"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "built",
+        "blocked",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

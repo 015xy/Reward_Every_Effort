@@ -1,0 +1,22 @@
+name: Checks
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check src tests scripts examples
+      - run: ruff format --check src tests scripts examples
+      - run: pytest
+      - run: ree doctor
+      - run: ree score examples/config-case.json --replay examples/config-replay.json --output outputs/score.json --html outputs/score.html
+      - run: python -m pip wheel --no-deps . -w dist

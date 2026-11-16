@@ -1,0 +1,15 @@
+task_description: Build release bundles from validated configurations.
+success_criteria:
+  - Every built bundle must have a validated source configuration.
+  - A merged release must include all required bundles.
+constraints:
+  - Explain blocked work and preserve already completed independent work.
+output_format: json
+output_schema:
+  type: object
+  properties:
+    built: {type: array}
+    blocked: {type: array}
+    reason: {type: string}
+  required: [built, blocked, reason]
+  additionalProperties: false
