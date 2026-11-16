@@ -23,8 +23,28 @@ from .models import BonusRule, Case, RewardProfile, Subject, TaskContext
 from .pack import load_pack
 
 
+def _json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def _invalid_json_constant(value):
+    raise ValueError(f"Non-finite JSON number: {value}")
+
+
+def _read_json(text):
+    return json.loads(text, object_pairs_hook=_json_object, parse_constant=_invalid_json_constant)
+
+
 def read_data(path):
-    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    path = Path(path)
+    text = path.read_text(encoding="utf-8-sig")
+    # Large conversation exports should use the JSON parser, not YAML's loader.
+    return _read_json(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
 
 
 def read_records(path):
@@ -35,7 +55,7 @@ def read_records(path):
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if line.strip():
             try:
-                records.append(json.loads(line))
+                records.append(_read_json(line))
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Invalid JSON on line {number}: {exc.msg}") from exc
     return records
@@ -151,6 +171,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="ree", description="Reward Every Effort")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Validate bundled plan without calling a model")
+    p = sub.add_parser("normalize", help="Convert one messages record to an observable Case")
+    p.add_argument("input")
+    p.add_argument("--index", type=int, default=0, help="Zero-based record position in a dataset")
+    p.add_argument("--output", required=True)
     for name in ["score", "batch", "regrade"]:
         p = sub.add_parser(name)
         p.add_argument("input")
@@ -164,6 +188,9 @@ def main(argv=None):
         p.add_argument("--timeout", type=float, default=45)
         p.add_argument("--deadline", type=float, default=600)
         p.add_argument("--retries", type=int, default=1)
+        p.add_argument(
+            "--min-interval", type=float, default=0, help="Seconds between judge requests"
+        )
         p.add_argument("--cache", type=Path)
     p = sub.add_parser("inspect")
     p.add_argument("input")
@@ -182,6 +209,26 @@ def main(argv=None):
     p.add_argument("input", nargs="+")
     args = parser.parse_args(argv)
     try:
+        if args.command == "normalize":
+            from .conversation import case_from_messages
+
+            data = read_records(args.input)
+            rows = data if isinstance(data, list) else [data]
+            if not 0 <= args.index < len(rows):
+                raise ValueError(f"Record index must be between 0 and {len(rows) - 1}")
+            case = case_from_messages(rows[args.index])
+            write_data(args.output, case.model_dump(mode="json"))
+            print(
+                json.dumps(
+                    {
+                        "record_index": args.index,
+                        "events": len(case.events),
+                        "evidence_complete": case.evidence_complete,
+                        "output": args.output,
+                    }
+                )
+            )
+            return 0
         if args.command == "doctor":
             pack = load_pack()
             print(
@@ -238,6 +285,7 @@ def main(argv=None):
                 max_calls=args.max_calls,
                 deadline=args.deadline,
                 retries=args.retries,
+                min_interval=args.min_interval,
                 cache=args.cache,
             )
         )
