@@ -39,6 +39,21 @@ global deadline/call budget and limited retries. Optional cache keys cover model
 endpoint, exact prompt, output schema and actual input; cache is opt-in because
 evaluation records can contain local data. It does not promise vendor reproducibility.
 
+Provider request pacing is optional (`--min-interval` in seconds) and shared across
+workers on one judge client. Retryable provider failures retain their HTTP status
+without exposing response bodies or credentials. Retry-After waits remain bounded
+by the run's deadline. Cache hits consume no provider requests.
+
+An invalid model evidence reference or exact quote gets at most one correction
+request. The correction must preserve the original status, value and reason, and
+passes the same evidence validation again. Failed corrections still invalidate the
+evaluation. `metadata.evidence_repairs` records these attempts, and extra requests
+consume the same call and time budgets. Deterministic verifiers do not call a model
+to repair their output.
+After a successful repair, the validated judgement replaces the original cache entry
+under the same model, policy, payload and schema identity. Reusing that entry does
+not repeat a repair of the known invalid quote.
+
 TaskPack validity means schemas, paths and plan references resolve. Accuracy,
 cross-provider agreement and RL learning gains require separate empirical tests.
 The framework intentionally retains rich universal judgement examples while

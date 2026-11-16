@@ -83,10 +83,8 @@ def aggregate_subjects(subjects: list[Subject], scores: list[dict]) -> dict:
                 final[i] = 0.0 if blocked else raw
                 qualified[i] = bool(scores[i]["row1"]) and not blocked
                 details[i].update(
+                    **subjects[i].model_dump(mode="json"),
                     index=i,
-                    subject=subjects[i].subject,
-                    constraints=[x.model_dump() for x in subjects[i].constraints],
-                    depends_on=subjects[i].depends_on,
                     task=t,
                     hop=h,
                     final_score=final[i],

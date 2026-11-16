@@ -34,6 +34,19 @@ export REE_BASE_URL=https://your-provider.example/v1
 ree score your-case.json --output outputs/score.json --html outputs/score.html
 ```
 
+For an existing dataset of OpenAI-style conversations, normalize a selected record
+before scoring. This imports observed messages and tool schemas, and leaves the
+source's old labels out of the new evaluation:
+
+```bash
+ree normalize conversations.json --index 0 --output outputs/case.json
+ree score outputs/case.json --output outputs/score.json --html outputs/score.html
+```
+
+The initial importer supports one user turn per record, including multiple tool
+calls and changing tool availability. Interrupted trajectories retain an explicit
+incomplete-evidence flag. See [conversation import](importing.md).
+
 No provider-specific headers, internal services, actor runtime, Docker environment,
 or business IDs are required. The judge must support JSON mode. The default
 timeout, call budget and retries are bounded and configurable; keys are never
