@@ -24,6 +24,18 @@ CLI accepts saved JSON objects, JSON arrays, or JSONL evaluation records. UI tex
 is localized; requests, judge reasons, policy identifiers, and evidence preserve
 their original language. A single-language export has no alternate-file link.
 
+Use **Open data** to choose or paste a saved JSON object, JSON array, or JSONL file
+(up to 20 MB). A successful import replaces the current dataset; an invalid import
+leaves it intact and explains which record could not be loaded. **Export JSON**
+downloads the selected evaluation with its original facts and scores. Language
+switching preserves loaded data and the current selection. Reading files, switching
+languages, and exporting records happen locally without a server or model call.
+
+Unscored `Case` inputs need evaluation first: run
+`ree score your-case.json --output result.json`, then open `result.json`. The
+Inspector reports this distinction instead of inventing scores for raw trajectories.
+Imported data lives in the current page until it is closed or reloaded.
+
 ## One reward flow
 
 Each selected record has one **Gate → Base → Deduct / Bonus → final reward**
@@ -39,7 +51,8 @@ diagram. Select a node to inspect that phase below the diagram.
   displays its own Base judgement without creating a task.
 - **Deduct:** select a quality group to inspect violation costs, reasons,
   references, and the recorded exponential profile. Full criteria support text
-  and status filters. Formula details use actual weights and parameters.
+  and status filters, including an all-groups view and groups whose checks are all
+  not applicable. Formula details use actual weights and parameters.
 - **Bonus:** actual eligibility decisions, judged values, granted amounts,
   uncapped sum, and configured cap. A disabled policy can show recorded zero;
   an unexecuted stage cannot.

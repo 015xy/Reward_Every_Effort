@@ -17,10 +17,32 @@
       <span class="brand">Reward Every Effort</span
       ><span class="app-purpose" data-i18n="score_flow"></span>
       <div class="header-actions">
+        <button id="open-data" data-i18n="open_data"></button>
+        <button id="export-record" data-i18n="export_record"></button>
         <a id="alternate-language" hidden></a
         ><button id="print" data-i18n="print"></button>
       </div>
     </header>
+    <dialog id="data-dialog" aria-labelledby="data-dialog-title">
+      <div class="dialog-heading">
+        <h2 id="data-dialog-title" data-i18n="open_data"></h2>
+        <button id="close-data" data-i18n="close"></button>
+      </div>
+      <p data-i18n="import_help"></p>
+      <label class="file-label" for="data-file" data-i18n="choose_file"></label>
+      <input
+        id="data-file"
+        type="file"
+        accept=".json,.jsonl,application/json"
+      />
+      <label for="data-text" data-i18n="paste_records"></label>
+      <textarea id="data-text" rows="7" spellcheck="false"></textarea>
+      <p id="import-error" class="import-error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="load-pasted" data-i18n="load_records"></button>
+      </div>
+    </dialog>
+    <div id="data-feedback" class="data-feedback" role="status" hidden></div>
     <main class="workbench" id="workbench">
       <aside class="data-pane">
         <div class="pane-title">
@@ -110,7 +132,7 @@
               <summary data-i18n="group_formula"></summary>
               <div id="group-equations"></div>
             </details>
-            <details class="calculation">
+            <details class="calculation" id="criterion-details" open>
               <summary data-i18n="criterion_details"></summary>
               <div class="filters">
                 <input id="search" type="search" /><select
@@ -143,7 +165,7 @@
       __LOCALE_JSON__
     </script>
     <script>
-      __REPORT_JS__
+      __REPORT_JS__;
     </script>
   </body>
 </html>

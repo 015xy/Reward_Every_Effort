@@ -279,7 +279,7 @@ def test_profile_table_is_preserved_without_hardcoded_reference_scores(tmp_path)
     assert "+ bonus" not in html
 
 
-def _run_renderer(tmp_path, record, driver):
+def _run_renderer(tmp_path, record, driver, *, dual=False):
     """Exercise exported JS and actual click handlers with a small offline DOM."""
     import shutil
     import subprocess
@@ -287,7 +287,12 @@ def _run_renderer(tmp_path, record, driver):
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node is unavailable for optional frontend regression")
-    html = render_report(record, tmp_path / "browser.html").read_text()
+    output = (
+        render_reports(record, tmp_path / "browser.html")["en"]
+        if dual
+        else render_report(record, tmp_path / "browser.html")
+    )
+    html = output.read_text()
     frontend = re.search(r"<script>(.*?)</script>", html, re.DOTALL)[1]
     source = r"""
 const vm = require("node:vm");
@@ -303,23 +308,38 @@ class Element {
   remove() { if(this.parentElement) this.parentElement.children=this.parentElement.children.filter(child=>child!==this); }
   focus() { this.focused=true; }
   scrollIntoView() { this.scrolled=true; }
+  showModal() { this.open=true; }
+  close() { this.open=false; this.callbacks.close?.(); }
 }
-const elements = new Map();
+const elements = new Map(), localized = [];
+const html = fs.readFileSync(process.argv[5],"utf8");
+for (const match of html.matchAll(/<([a-z][\w-]*)\b([^>]+)>/gi)) {
+ const attrs=match[2], id=attrs.match(/\bid="([^"]+)"/), key=attrs.match(/\bdata-i18n="([^"]+)"/);
+ if (!id && !key) continue;
+ const node=new Element(match[1]);
+ const className=attrs.match(/\bclass="([^"]+)"/); if(className) node.className=className[1];
+ if(id) elements.set(id[1],node);
+ if(key) { node.dataset={i18n:key[1]}; localized.push(node); }
+ node.open=/\bopen\b/.test(attrs);
+}
 const document = {
- getElementById(id) { if(!elements.has(id)) elements.set(id,new Element("div")); return elements.get(id); },
+ documentElement:new Element("html"),
+ getElementById(id) { return elements.get(id) || null; },
  createElement(tag) { return new Element(tag); },
  createElementNS(ns,tag) { return new Element(tag); },
- querySelectorAll() { return []; }
+ querySelectorAll(selector) { return selector==="[data-i18n]" ? localized : []; }
 };
 const $ = id => document.getElementById(id);
 let mobileViewport=false;
 $("evaluation-record").textContent=fs.readFileSync(process.argv[2],"utf8");
 $("ui-locale").textContent=fs.readFileSync(process.argv[4],"utf8");
-vm.runInNewContext(fs.readFileSync(process.argv[3],"utf8"), {
+const context=vm.createContext({
  document, window: {print(){},matchMedia(query){return {matches:mobileViewport && query.includes("max-width")};}}, console
 });
+vm.runInContext(fs.readFileSync(process.argv[3],"utf8"),context);
+const run = code => vm.runInContext(code,context);
 const all = node => [node,...node.children.flatMap(all)];
-const click = node => node.callbacks.click();
+const click = node => node.callbacks.click({preventDefault(){}});
 """
     runner, inputs, script, ui = [
         tmp_path / name for name in ("driver.js", "input.json", "actual.js", "locale.json")
@@ -329,7 +349,7 @@ const click = node => node.callbacks.click();
     script.write_text(frontend)
     ui.write_text(json.dumps(locale_data(html)))
     result = subprocess.run(
-        [node, str(runner), str(inputs), str(script), str(ui)],
+        [node, str(runner), str(inputs), str(script), str(ui), str(output)],
         capture_output=True,
         text=True,
         timeout=10,
@@ -514,7 +534,7 @@ def test_violations_and_partial_failures_have_failure_status_badges(tmp_path, va
         record,
         r"""
 click($("flow-deduction"));
-console.log(JSON.stringify(all($("group-detail")).filter(node=>node.className.startsWith("status")).map(node=>({text:node.textContent,style:node.className}))));
+console.log(JSON.stringify(all($("criterion-list")).filter(node=>node.className.startsWith("status")).map(node=>({text:node.textContent,style:node.className}))));
 """,
     )
     assert {"text": "Violation", "style": "status failed"} in values
@@ -530,7 +550,7 @@ click($("flow-deduction"));
 const stagePane=$("workbench").className;
 const issue=all($("trace-content")).find(node=>node.className.includes("evidence-issue"));
 const before={pane:stagePane,highlighted:!!issue,focused:issue.focused===true};
-click(all($("group-detail")).find(node=>node.className==="inspect-evidence"));
+click(all($("criterion-list")).find(node=>node.className==="inspect-evidence"));
 console.log(JSON.stringify({before,after:{pane:$("workbench").className,focused:issue.focused===true}}));
 """,
     )
@@ -540,3 +560,240 @@ console.log(JSON.stringify({before,after:{pane:$("workbench").className,focused:
         "focused": False,
     }
     assert values["after"] == {"pane": "workbench show-trace", "focused": True}
+
+
+def test_every_unscored_group_remains_inspectable_without_invented_scores(tmp_path):
+    record = _annotated_record()
+    record["criteria"].extend(
+        [
+            {
+                "name": "tool_use.schema",
+                "group": "tool_use",
+                "status": "not_applicable",
+                "value": None,
+                "weight": 2.0,
+                "reason": "No tool calls to inspect.",
+            },
+            {
+                "name": "format.syntax",
+                "group": "format",
+                "status": "not_applicable",
+                "value": None,
+                "weight": 1.0,
+                "reason": "No output format was declared.",
+            },
+        ]
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+const groups=$("group-list").children.map(node=>node._groupName);
+click($("group-list").children.find(node=>node._groupName==="tool_use"));
+console.log(JSON.stringify({groups,details:$("group-detail").textContent,checks:$("criterion-list").textContent,curve:$("curve").children.length,quality:$("quality-equations").textContent}));
+""",
+    )
+    assert set(values["groups"]) == {"*", "hallucination", "tool_use", "format"}
+    assert "Not applicable" in values["details"]
+    assert "C = —" in values["details"] and "q = —" in values["details"]
+    assert "tool_use.schema" in values["checks"]
+    assert "No tool calls to inspect." in values["checks"]
+    assert values["curve"] == 0
+    assert "0.5000" in values["quality"]  # Unscored groups do not change stored quality.
+
+
+def test_query_filter_updates_selection_and_empty_state_then_recovers(tmp_path):
+    first, second = _annotated_record(), _annotated_record()
+    first["case"]["request"], second["case"]["request"] = "First query", "Second query"
+    second["reward"] = 0.25
+    values = _run_renderer(
+        tmp_path,
+        [first, second],
+        r"""
+$("query-search").value="Second"; $("query-search").callbacks.input();
+const selected={query:$("request-title").textContent,reward:$("flow-reward").textContent,count:$("query-list").children.length,exportDisabled:$("export-record").disabled};
+$("query-search").value="No matching query"; $("query-search").callbacks.input();
+const empty={query:$("request-title").textContent,record:run("getSelectedRecord()"),flowDisabled:$("flow-base").disabled,exportDisabled:$("export-record").disabled,trace:$("trace-content").textContent};
+$("query-search").value=""; $("query-search").callbacks.input();
+console.log(JSON.stringify({selected,empty,recovered:{query:$("request-title").textContent,count:$("query-list").children.length,flowDisabled:$("flow-base").disabled,exportDisabled:$("export-record").disabled}}));
+""",
+    )
+    assert values["selected"] == {
+        "query": "Second query",
+        "reward": "Reward0.2500",
+        "count": 1,
+        "exportDisabled": False,
+    }
+    assert values["empty"]["record"] is None
+    assert values["empty"]["flowDisabled"] is values["empty"]["exportDisabled"] is True
+    assert "Second query" not in values["empty"]["trace"]
+    assert values["recovered"] == {
+        "query": "First query",
+        "count": 2,
+        "flowDisabled": False,
+        "exportDisabled": False,
+    }
+
+
+def test_criterion_filters_remove_hidden_duplicates_and_stale_trace_highlights(tmp_path):
+    values = _run_renderer(
+        tmp_path,
+        _annotated_record(),
+        r"""
+click($("flow-deduction"));
+const before=all($("trace-content")).filter(node=>node.className.includes("evidence-issue")).length;
+$("search").value="no such criterion"; $("search").callbacks.input();
+console.log(JSON.stringify({before,after:all($("trace-content")).filter(node=>node.className.includes("evidence-issue")).length,summary:$("group-detail").textContent,checks:$("criterion-list").textContent,count:$("check-count").textContent}));
+""",
+    )
+    assert values["before"] == 1 and values["after"] == 0
+    assert "hallucination.execution_claim" not in values["summary"]
+    assert "hallucination.execution_claim" not in values["checks"]
+    assert "0 of 1" in values["count"]
+
+
+def test_replace_records_resets_filters_and_can_show_an_empty_workspace(tmp_path):
+    values = _run_renderer(
+        tmp_path,
+        _annotated_record(),
+        r"""
+$("query-search").value="old filter";
+run('replaceRecords([{status:"ok",reward:0.75,case:{request:"Imported query"}}])');
+const loaded={query:$("request-title").textContent,filter:$("query-search").value,reward:$("flow-reward").textContent};
+run("replaceRecords([])");
+const empty={record:run("getSelectedRecord()"),exportDisabled:$("export-record").disabled};
+run('replaceRecords([{status:"invalid",case:{request:"Recovered input"}}])');
+console.log(JSON.stringify({loaded,empty,recovered:$("request-title").textContent}));
+""",
+    )
+    assert values["loaded"] == {"query": "Imported query", "filter": "", "reward": "Reward0.7500"}
+    assert values["empty"] == {"record": None, "exportDisabled": True}
+    assert values["recovered"] == "Recovered input"
+
+
+def test_replace_records_rolls_back_data_selection_filters_and_stage_on_render_error(tmp_path):
+    values = _run_renderer(
+        tmp_path,
+        _annotated_record(),
+        r"""
+click($("flow-deduction"));
+$("query-search").value="debug"; // Preserve the visible prior record and active view.
+$("search").value="execution"; $("search").callbacks.input();
+let failed=false;
+try { run('replaceRecords([{status:"invalid",subjects:[null]}])'); } catch { failed=true; }
+console.log(JSON.stringify({failed,query:$("request-title").textContent,queryFilter:$("query-search").value,checkFilter:$("search").value,active:$("stage-deduction").hidden,record:run("getSelectedRecord().case.request"),exportDisabled:$("export-record").disabled}));
+""",
+    )
+    assert values == {
+        "failed": True,
+        "query": "Change the debug setting.",
+        "queryFilter": "debug",
+        "checkFilter": "execution",
+        "active": False,
+        "record": "Change the debug setting.",
+        "exportDisabled": False,
+    }
+
+
+def test_language_switch_keeps_imported_records_selected_view_and_filters(tmp_path):
+    values = _run_renderer(
+        tmp_path,
+        _annotated_record(),
+        r"""
+run('replaceRecords([{status:"ok",reward:0.75,case:{request:"Imported first"}},{status:"invalid",case:{request:"Imported second"}}])');
+click($("query-list").children[1]); click($("flow-base"));
+$("query-search").value="Imported"; $("query-search").callbacks.input();
+$("search").value="kept filter";
+click($("alternate-language"));
+const chinese={query:$("request-title").textContent,count:$("query-list").children.length,stageHidden:$("stage-base").hidden,title:document.title,filter:$("search").value,link:$("alternate-language").textContent,href:$("alternate-language").href};
+click($("alternate-language"));
+console.log(JSON.stringify({chinese,english:{query:$("request-title").textContent,title:document.title,stageHidden:$("stage-base").hidden,link:$("alternate-language").textContent}}));
+""",
+        dual=True,
+    )
+    assert values["chinese"] == {
+        "query": "Imported second",
+        "count": 2,
+        "stageHidden": False,
+        "title": "Reward Every Effort | 奖赏计算",
+        "filter": "kept filter",
+        "link": "English",
+        "href": "browser.en.html",
+    }
+    assert values["english"] == {
+        "query": "Imported second",
+        "title": "Reward Every Effort | Reward calculation",
+        "stageHidden": False,
+        "link": "中文",
+    }
+
+
+def test_all_groups_searches_across_groups_and_preserves_filters_when_switching(tmp_path):
+    record = _annotated_record()
+    record["criteria"].extend(
+        [
+            {
+                "name": "tool_use.schema",
+                "group": "tool_use",
+                "status": "not_applicable",
+                "value": None,
+                "weight": 2.0,
+                "reason": "No tool calls to inspect.",
+            },
+            {
+                "name": "format.schema",
+                "group": "format",
+                "status": "not_applicable",
+                "value": None,
+                "weight": 1.0,
+                "reason": "No format was declared.",
+            },
+        ]
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+$("search").value="schema"; $("search").callbacks.input();
+$("status-filter").value="not_applicable"; $("status-filter").callbacks.change();
+const scoped=$("criterion-list").textContent;
+click($("group-list").children.find(node=>node._groupName==="*"));
+const allView={checks:$("criterion-list").textContent,count:$("check-count").textContent,curve:$("curve").children.length,summary:$("group-detail").textContent};
+click($("group-list").children.find(node=>node._groupName==="tool_use"));
+const single={checks:$("criterion-list").textContent,search:$("search").value,status:$("status-filter").value};
+click($("group-list").children.find(node=>node._groupName==="*"));
+console.log(JSON.stringify({scoped,all:allView,single,again:$("criterion-list").textContent,search:$("search").value,status:$("status-filter").value}));
+""",
+    )
+    assert "tool_use.schema" not in values["scoped"]
+    assert "tool_use.schema" in values["all"]["checks"]
+    assert "format.schema" in values["all"]["checks"]
+    assert "2 of 3" in values["all"]["count"]
+    assert "Weighted quality q" in values["all"]["summary"]
+    assert "0.5000" in values["all"]["summary"]
+    assert values["all"]["curve"] == 0
+    assert "tool_use.schema" in values["single"]["checks"]
+    assert "format.schema" not in values["single"]["checks"]
+    assert values["single"]["search"] == values["search"] == "schema"
+    assert values["single"]["status"] == values["status"] == "not_applicable"
+    assert values["again"] == values["all"]["checks"]
+
+
+def test_switching_from_all_groups_restores_actual_group_curve_and_equations(tmp_path):
+    values = _run_renderer(
+        tmp_path,
+        _annotated_record(),
+        r"""
+click($("flow-deduction"));
+click($("group-list").children.find(node=>node._groupName==="*"));
+const allView={curve:$("curve").children.length,active:$("group-list").children.find(node=>node._groupName==="*").attrs["aria-pressed"]};
+click($("group-list").children.find(node=>node._groupName==="hallucination"));
+console.log(JSON.stringify({all:allView,single:{curve:$("curve").children.length,equations:$("group-equations").textContent,active:$("group-list").children.find(node=>node._groupName==="hallucination").attrs["aria-pressed"]}}));
+""",
+    )
+    assert values["all"] == {"curve": 0, "active": "true"}
+    assert values["single"]["curve"] == 1
+    assert "C = 4.0000" in values["single"]["equations"]
+    assert values["single"]["active"] == "true"

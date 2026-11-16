@@ -5,7 +5,7 @@ const data = JSON.parse(
   document.getElementById("evaluation-record").textContent,
 );
 const locale = JSON.parse(document.getElementById("ui-locale").textContent);
-const strings = locale.strings;
+let strings = locale.strings;
 const $ = (id) => document.getElementById(id);
 const t = (key, values = {}) =>
   (strings[key] || key).replace(/\{(\w+)\}/g, (_, name) =>
@@ -51,8 +51,9 @@ const judgementFlag = (j) =>
         j.status || "neutral",
         j.status ? t("status_" + j.status) : t("unavailable"),
       );
-const records = Array.isArray(data) ? data : [data];
+let records = Array.isArray(data) ? data : [data];
 const stages = ["gate", "base", "deduction", "bonus", "reward"];
+const ALL_GROUPS = "*";
 let selectedRecord = 0,
   selectedSubject = null,
   selectedGroup = null,
@@ -71,67 +72,125 @@ let evidenceMap = new Map(),
   annotationNotes = [],
   highlightedTargets = [];
 
-for (const node of document.querySelectorAll("[data-i18n]"))
-  node.textContent = t(node.dataset.i18n);
-document.title = "Reward Every Effort | " + t("title");
-$("query-search").placeholder = t("query_search");
-$("query-search").setAttribute("aria-label", t("query_search"));
-$("search").placeholder = t("search");
-$("search").setAttribute("aria-label", t("search"));
-$("status-filter").setAttribute("aria-label", t("all_statuses"));
-$("flow-diagram").setAttribute("aria-label", t("flow_title"));
-$("print").addEventListener("click", () => window.print());
-if (locale.alternate) {
+function refreshLocalization() {
+  for (const node of document.querySelectorAll("[data-i18n]"))
+    node.textContent = t(node.dataset.i18n);
+  document.title = "Reward Every Effort | " + t("title");
+  if (document.documentElement)
+    document.documentElement.lang = locale.locale === "zh" ? "zh-CN" : "en";
+  $("query-search").placeholder = t("query_search");
+  $("query-search").setAttribute("aria-label", t("query_search"));
+  $("search").placeholder = t("search");
+  $("search").setAttribute("aria-label", t("search"));
+  $("status-filter").setAttribute("aria-label", t("all_statuses"));
+  $("flow-diagram").setAttribute("aria-label", t("flow_title"));
+  const state = $("status-filter").value || "all";
+  $("status-filter").replaceChildren();
+  for (const code of [
+    "all",
+    "failed",
+    "ok",
+    "not_applicable",
+    "missing_evidence",
+    "error",
+    "not_run",
+  ]) {
+    const option = element(
+      "option",
+      code === "all"
+        ? t("all_statuses")
+        : code === "failed"
+          ? t("failed")
+          : code === "ok"
+            ? t("evaluated")
+            : t("status_" + code),
+    );
+    option.value = code;
+    $("status-filter").append(option);
+  }
+  $("status-filter").value = state;
   const link = $("alternate-language");
-  link.hidden = false;
-  link.textContent = locale.alternate.label;
-  link.href = locale.alternate.href;
+  if (locale.other || locale.alternate) {
+    link.hidden = false;
+    link.textContent = locale.other
+      ? locale.other.locale === "zh"
+        ? "中文"
+        : "English"
+      : locale.alternate.label;
+    if (locale.alternate) link.href = locale.alternate.href;
+  }
 }
-for (const code of [
-  "all",
-  "failed",
-  "ok",
-  "not_applicable",
-  "missing_evidence",
-  "error",
-]) {
-  const option = element(
-    "option",
-    code === "all"
-      ? t("all_statuses")
-      : code === "failed"
-        ? t("failed")
-        : code === "ok"
-          ? t("evaluated")
-          : t("status_" + code),
-  );
-  option.value = code;
-  $("status-filter").append(option);
+function switchLanguage(event) {
+  if (!locale.other) return;
+  event.preventDefault();
+  const current = { locale: locale.locale, strings };
+  const next = locale.other;
+  locale.locale = next.locale;
+  locale.strings = next.strings;
+  strings = next.strings;
+  locale.other = current;
+  if (locale.alternate && locale.current_href) {
+    const href = locale.alternate.href;
+    locale.alternate.href = locale.current_href;
+    locale.current_href = href;
+  }
+  refreshLocalization();
+  $("data-feedback").hidden = true;
+  $("import-error").hidden = true;
+  if (record) selectRecord(selectedRecord, { preserveState: true });
+  else {
+    renderEmptyRecord();
+    renderQueryList();
+  }
 }
-$("status-filter").value = "all";
-$("query-search").addEventListener("input", renderQueryList);
-$("search").addEventListener("input", renderCriteria);
-$("status-filter").addEventListener("change", renderCriteria);
+refreshLocalization();
+$("print").addEventListener("click", () => window.print());
+$("alternate-language").addEventListener("click", switchLanguage);
+$("query-search").addEventListener("input", applyQueryFilter);
+$("search").addEventListener("input", () => {
+  clearAnnotations();
+  renderCriteria();
+});
+$("status-filter").addEventListener("change", () => {
+  clearAnnotations();
+  renderCriteria();
+});
 for (const stage of stages)
   $("flow-" + stage).addEventListener("click", () => selectStage(stage, true));
 
-function renderQueryList() {
+function matchingRecordIndices() {
   const query = $("query-search").value.trim().toLowerCase();
-  const target = $("query-list");
-  target.replaceChildren();
-  let count = 0;
-  records.forEach((item, index) => {
+  return records.flatMap((item, index) => {
     const title =
       object(item.case).request || t("record_index", { index: index + 1 });
-    if (
-      query &&
-      ![title, object(item.metadata).model, object(item.metadata).pack_name]
+    return !query ||
+      [title, object(item.metadata).model, object(item.metadata).pack_name]
         .join(" ")
         .toLowerCase()
         .includes(query)
-    )
-      return;
-    count += 1;
+      ? [index]
+      : [];
+  });
+}
+function applyQueryFilter() {
+  const matches = matchingRecordIndices();
+  if (!matches.includes(selectedRecord)) {
+    if (matches.length) selectRecord(matches[0]);
+    else {
+      selectedRecord = null;
+      renderEmptyRecord();
+      renderQueryList();
+    }
+  } else renderQueryList();
+}
+function renderQueryList() {
+  const target = $("query-list");
+  target.replaceChildren();
+  const matches = matchingRecordIndices();
+  for (const index of matches) {
+    const item = records[index],
+      title =
+        object(item.case).request || t("record_index", { index: index + 1 });
     const button = element(
       "button",
       undefined,
@@ -149,9 +208,9 @@ function renderQueryList() {
     button.append(info);
     button.addEventListener("click", () => selectRecord(index));
     target.append(button);
-  });
-  $("query-count").textContent = t("query_count", { count });
-  if (!count) target.append(note(t("no_matches")));
+  }
+  $("query-count").textContent = t("query_count", { count: matches.length });
+  if (!matches.length) target.append(note(t("no_matches")));
 }
 
 function clearAnnotations() {
@@ -469,6 +528,7 @@ function stageSkipped(stage) {
   return false;
 }
 function selectStage(stage, interactive = false) {
+  if (!record) return;
   activeStage = stage;
   $("score-details").scrollTop = 0;
   for (const name of stages) {
@@ -528,6 +588,7 @@ function renderFlow() {
   };
   for (const stage of stages) {
     const node = $("flow-" + stage);
+    node.disabled = false;
     node.replaceChildren(
       element(
         "span",
@@ -950,6 +1011,49 @@ function criterionCost(item) {
     ? item.weight * (1 - value)
     : null;
 }
+function availableGroups() {
+  const names = [
+    ...new Set([
+      ...groups.map((g) => g.name),
+      ...criteria.map((c) => c.group),
+      ...Object.keys(object(profile.group_weights)),
+    ]),
+  ].filter((name) => typeof name === "string");
+  return names.map((name) => {
+    const scored = groups.find((g) => g.name === name);
+    if (scored) return scored;
+    const members = criteria.filter((c) => c.group === name);
+    return {
+      name,
+      weight: object(profile.group_weights)[name] ?? null,
+      cost: null,
+      score: null,
+      status:
+        members.length && members.every((c) => c.status === "not_applicable")
+          ? "not_applicable"
+          : "not_recorded",
+      unscored: true,
+    };
+  });
+}
+function filteredCriteria() {
+  const query = $("search").value.trim().toLowerCase(),
+    state = $("status-filter").value;
+  return criteria.filter(
+    (c) =>
+      (!selectedGroup ||
+        selectedGroup === ALL_GROUPS ||
+        c.group === selectedGroup) &&
+      (!query ||
+        [c.name, c.reason, ...list(c.evidence_refs)]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)) &&
+      (state === "all" || state === "" || state === "failed"
+        ? state !== "failed" || criterionCost(c) > 0
+        : c.status === state),
+  );
+}
 function renderDeduction() {
   $("quality-equations").replaceChildren();
   $("group-list").replaceChildren();
@@ -975,26 +1079,104 @@ function renderDeduction() {
     $("quality-equations").append(
       note(t("no_active_default") + " " + fmt(record.quality)),
     );
-  for (const group of groups) {
+  const options = availableGroups();
+  const allButton = element("button", t("all_groups"));
+  allButton.type = "button";
+  allButton._groupName = ALL_GROUPS;
+  allButton.addEventListener("click", () => selectGroup(ALL_GROUPS, true));
+  $("group-list").append(allButton);
+  for (const group of options) {
     const button = element(
       "button",
-      groupName(group.name) + " " + fmt(group.score, 3),
+      groupName(group.name) +
+        " " +
+        (group.unscored
+          ? t(
+              group.status === "not_applicable"
+                ? "status_not_applicable"
+                : "not_recorded",
+            )
+          : fmt(group.score, 3)),
     );
     button.type = "button";
     button._groupName = group.name;
     button.addEventListener("click", () => selectGroup(group.name, true));
     $("group-list").append(button);
   }
-  if (groups.length) selectGroup(selectedGroup, false);
+  if (options.length || selectedGroup === ALL_GROUPS)
+    selectGroup(selectedGroup, false);
   else {
     $("group-detail").replaceChildren(note(t("no_groups")));
     renderCriteria();
   }
 }
+function weightedQualityEquation() {
+  const active = groups.filter((g) => finite(g.weight) && finite(g.score));
+  return active.length
+    ? math(
+        t("weighted_quality") +
+          " = (" +
+          active.map((g) => fmt(g.weight) + "×" + fmt(g.score)).join(" + ") +
+          ") / (" +
+          active.map((g) => fmt(g.weight)).join(" + ") +
+          ") = " +
+          fmt(record.quality),
+      )
+    : groups.length
+      ? math(t("weighted_quality") + " = " + fmt(record.quality))
+      : note(t("no_active_default") + " " + fmt(record.quality));
+}
+function finishGroupSelection(interactive) {
+  renderCriteria();
+  if (!interactive) return;
+  const losses = filteredCriteria()
+    .filter((c) => criterionCost(c) > 0)
+    .sort((a, b) => criterionCost(b) - criterionCost(a));
+  const first =
+    losses.find((c) => list(c.annotations).some((a) => a.kind === "issue")) ||
+    losses.find((c) => list(c.evidence_refs).length);
+  if (first) annotate(first, automaticJump());
+  else clearAnnotations();
+}
 function selectGroup(name, interactive = false) {
-  const group =
-    groups.find((g) => g.name === name) ||
-    [...groups].sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
+  if (name === ALL_GROUPS) {
+    selectedGroup = ALL_GROUPS;
+    for (const button of $("group-list").children) {
+      const active = button._groupName === ALL_GROUPS;
+      button.className = active ? "active" : "";
+      button.setAttribute("aria-pressed", active);
+    }
+    const target = $("group-detail");
+    target.replaceChildren(
+      element("h4", t("all_groups"), "detail-heading"),
+      weightedQualityEquation(),
+    );
+    for (const group of groups)
+      target.append(
+        note(
+          groupName(group.name) +
+            " · q = " +
+            fmt(group.score) +
+            " · " +
+            t("weight") +
+            " = " +
+            fmt(group.weight),
+        ),
+      );
+    target.append(note(t("inactive_note")));
+    $("group-equations").replaceChildren(
+      weightedQualityEquation(),
+      note(t("inactive_note")),
+    );
+    $("curve").replaceChildren();
+    finishGroupSelection(interactive);
+    return;
+  }
+  const options = availableGroups(),
+    group =
+      options.find((g) => g.name === name) ||
+      [...groups].sort((a, b) => (b.cost || 0) - (a.cost || 0))[0] ||
+      options[0];
   if (!group) return;
   selectedGroup = group.name;
   for (const button of $("group-list").children) {
@@ -1004,10 +1186,6 @@ function selectGroup(name, interactive = false) {
   }
   const target = $("group-detail");
   target.replaceChildren();
-  const members = criteria.filter((c) => c.group === group.name),
-    losses = members
-      .filter((c) => criterionCost(c) > 0)
-      .sort((a, b) => criterionCost(b) - criterionCost(a));
   target.append(
     element("h4", groupName(group.name), "detail-heading"),
     math(
@@ -1022,56 +1200,68 @@ function selectGroup(name, interactive = false) {
         fmt(group.weight),
     ),
   );
+  if (group.unscored)
+    target.append(
+      badge(
+        "not_applicable",
+        t(
+          group.status === "not_applicable"
+            ? "status_not_applicable"
+            : "not_recorded",
+        ),
+      ),
+      note(t("group_not_scored")),
+    );
   if (group.status === "invalid") target.append(note(t("inactive_note")));
-  if (losses.length) {
-    for (const item of losses) target.append(criterionCard(item));
-  } else target.append(note(t("no_losses")));
   const all = $("group-equations");
   all.replaceChildren();
-  const costs = members
-    .filter((c) => c.status === "ok")
-    .map((c) => fmt(c.weight) + "×(1−" + fmt(observed(c.value)) + ")");
-  all.append(
-    math("C = " + (costs.join(" + ") || "—") + " = " + fmt(group.cost)),
-    math("q(C) = max(0, 1 − (1 − 2^(−C/H)) / (1 − 2^(−C_max/H)))"),
-    math(
-      "H = " +
-        fmt(profile.half_life) +
-        "; C_max = " +
-        fmt(profile.max_cost) +
-        "; q = " +
-        fmt(group.score),
-    ),
-  );
-  const active = groups.filter((g) => finite(g.weight) && finite(g.score));
-  all.append(
-    math(
-      t("weighted_quality") +
-        " = (" +
-        active.map((g) => fmt(g.weight) + "×" + fmt(g.score)).join(" + ") +
-        ") / (" +
-        active.map((g) => fmt(g.weight)).join(" + ") +
-        ") = " +
-        fmt(record.quality),
-    ),
-    note(t("inactive_note")),
-  );
-  renderCurve(group);
-  renderCriteria();
-  if (interactive) {
-    const first =
-      losses.find((c) => list(c.annotations).some((a) => a.kind === "issue")) ||
-      losses.find((c) => list(c.evidence_refs).length);
-    if (first) annotate(first, automaticJump());
-    else clearAnnotations();
+  if (group.unscored) {
+    all.append(note(t("group_not_scored")));
+    $("curve").replaceChildren();
+  } else {
+    const costs = criteria
+      .filter((c) => c.group === group.name && c.status === "ok")
+      .map((c) => fmt(c.weight) + "×(1−" + fmt(observed(c.value)) + ")");
+    all.append(
+      math("C = " + (costs.join(" + ") || "—") + " = " + fmt(group.cost)),
+      math("q(C) = max(0, 1 − (1 − 2^(−C/H)) / (1 − 2^(−C_max/H)))"),
+      math(
+        "H = " +
+          fmt(profile.half_life) +
+          "; C_max = " +
+          fmt(profile.max_cost) +
+          "; q = " +
+          fmt(group.score),
+      ),
+    );
+    const active = groups.filter((g) => finite(g.weight) && finite(g.score));
+    all.append(
+      math(
+        t("weighted_quality") +
+          " = (" +
+          active.map((g) => fmt(g.weight) + "×" + fmt(g.score)).join(" + ") +
+          ") / (" +
+          active.map((g) => fmt(g.weight)).join(" + ") +
+          ") = " +
+          fmt(record.quality),
+      ),
+      note(t("inactive_note")),
+    );
+    renderCurve(group);
   }
+  finishGroupSelection(interactive);
 }
 function criterionCard(item) {
   const box = element("div", undefined, "criterion-item");
   box._criterionName = item.name;
   const head = element("div", undefined, "criterion-top");
   head.append(
-    element("span", item.name || "—", "criterion-name"),
+    element(
+      "span",
+      (selectedGroup === ALL_GROUPS ? groupName(item.group) + " · " : "") +
+        (item.name || "—"),
+      "criterion-name",
+    ),
     badge(
       item.status === "ok" &&
         observed(item.value) !== null &&
@@ -1107,22 +1297,13 @@ function renderCriteria() {
   if (!record) return;
   const target = $("criterion-list");
   target.replaceChildren();
-  const query = $("search").value.trim().toLowerCase(),
-    state = $("status-filter").value;
   const members = criteria.filter(
-    (c) => !selectedGroup || c.group === selectedGroup,
-  );
-  const shown = members.filter(
-    (c) =>
-      (!query ||
-        [c.name, c.reason, ...list(c.evidence_refs)]
-          .join(" ")
-          .toLowerCase()
-          .includes(query)) &&
-      (state === "all" || state === "" || state === "failed"
-        ? state !== "failed" || criterionCost(c) > 0
-        : c.status === state),
-  );
+      (c) =>
+        !selectedGroup ||
+        selectedGroup === ALL_GROUPS ||
+        c.group === selectedGroup,
+    ),
+    shown = filteredCriteria();
   $("check-count").textContent = t("check_count", {
     count: shown.length,
     total: members.length,
@@ -1330,7 +1511,15 @@ function setMobilePane(pane) {
 }
 $("mobile-trace").addEventListener("click", () => setMobilePane("trace"));
 $("mobile-score").addEventListener("click", () => setMobilePane("score"));
-function selectRecord(index) {
+function selectRecord(index, { preserveState = false } = {}) {
+  if (!records[index]) {
+    selectedRecord = null;
+    renderEmptyRecord();
+    renderQueryList();
+    return;
+  }
+  const previousStage = activeStage,
+    previousPane = mobilePane;
   selectedRecord = index;
   record = object(records[index]);
   caseData = object(record.case);
@@ -1341,10 +1530,15 @@ function selectRecord(index) {
   criteria = list(record.criteria);
   groups = list(record.groups);
   subjectMap = new Map(subjects.map((s) => [s.index, s]));
-  selectedSubject = subjects[0]?.index ?? null;
-  selectedGroup = null;
-  $("search").value = "";
-  $("status-filter").value = "all";
+  if (!preserveState) {
+    selectedSubject = subjects[0]?.index ?? null;
+    selectedGroup = null;
+    $("search").value = "";
+    $("status-filter").value = "all";
+  }
+  $("search").disabled = false;
+  $("status-filter").disabled = false;
+  $("export-record").disabled = false;
   $("record-status").className = "status " + record.status;
   $("record-status").textContent = t("status_" + record.status);
   $("request-title").textContent = caseData.request || t("no_request");
@@ -1370,9 +1564,138 @@ function selectRecord(index) {
   renderDeduction();
   renderBonus();
   renderReward();
-  selectStage("reward");
-  setMobilePane("score");
-  $("trace-content").scrollTop = 0;
-  $("score-details").scrollTop = 0;
+  selectStage(preserveState ? previousStage : "reward");
+  setMobilePane(preserveState ? previousPane : "score");
+  if (!preserveState) {
+    $("trace-content").scrollTop = 0;
+    $("score-details").scrollTop = 0;
+  }
 }
-selectRecord(0);
+function renderEmptyRecord() {
+  clearAnnotations();
+  record = null;
+  caseData = {};
+  metadata = {};
+  profile = {};
+  subjects = [];
+  tasks = [];
+  criteria = [];
+  groups = [];
+  subjectMap = new Map();
+  selectedSubject = null;
+  selectedGroup = null;
+  evidenceMap = new Map();
+  evidencePieces = [];
+  $("request-title").textContent = t("no_selection");
+  $("request-title").title = "";
+  $("record-status").textContent = "";
+  $("record-status").className = "status neutral";
+  $("run-line").textContent = "";
+  $("metadata-content").textContent = "";
+  $("trace-content").replaceChildren(note(t("no_selection")));
+  $("flow-diagram").className = "flow-diagram";
+  for (const stage of stages) {
+    const node = $("flow-" + stage);
+    node.disabled = true;
+    node._flowClass = "skipped text-value";
+    node.className = node._flowClass;
+    node.setAttribute("aria-pressed", false);
+    node.replaceChildren(
+      element(
+        "span",
+        t(
+          stage === "deduction"
+            ? "deduct"
+            : stage === "reward"
+              ? "final_reward"
+              : stage,
+        ),
+        "flow-name",
+      ),
+      element("span", "—", "flow-value"),
+    );
+    $("stage-" + stage).hidden = stage !== "reward";
+  }
+  for (const id of [
+    "gate-detail",
+    "subject-list",
+    "subject-detail",
+    "base-equations",
+    "lookup-head",
+    "lookup-rows",
+    "quality-equations",
+    "group-list",
+    "group-detail",
+    "curve",
+    "group-equations",
+    "criterion-list",
+    "bonus-detail",
+  ])
+    $(id).replaceChildren();
+  $("check-count").textContent = "";
+  $("score-summary").replaceChildren();
+  $("reward-detail").replaceChildren(note(t("no_selection")));
+  $("search").disabled = true;
+  $("status-filter").disabled = true;
+  $("export-record").disabled = true;
+  activeStage = "reward";
+}
+function getSelectedRecord() {
+  return record || null;
+}
+function replaceRecords(nextRecords) {
+  if (!Array.isArray(nextRecords))
+    throw new TypeError(
+      "replaceRecords expects an array of validated evaluation records",
+    );
+  const previous = {
+    records,
+    selectedRecord,
+    selectedSubject,
+    selectedGroup,
+    activeStage,
+    mobilePane,
+    query: $("query-search").value,
+    search: $("search").value,
+    status: $("status-filter").value,
+    traceScroll: $("trace-content").scrollTop,
+    scoreScroll: $("score-details").scrollTop,
+  };
+  try {
+    records = [...nextRecords];
+    selectedRecord = records.length ? 0 : null;
+    selectedSubject = null;
+    selectedGroup = null;
+    $("query-search").value = "";
+    $("search").value = "";
+    $("status-filter").value = "all";
+    if (records.length) selectRecord(0);
+    else {
+      renderEmptyRecord();
+      renderQueryList();
+      setMobilePane("score");
+    }
+  } catch (error) {
+    records = previous.records;
+    selectedRecord = previous.selectedRecord;
+    selectedSubject = previous.selectedSubject;
+    selectedGroup = previous.selectedGroup;
+    activeStage = previous.activeStage;
+    mobilePane = previous.mobilePane;
+    $("query-search").value = previous.query;
+    $("search").value = previous.search;
+    $("status-filter").value = previous.status;
+    if (selectedRecord != null)
+      selectRecord(selectedRecord, { preserveState: true });
+    else {
+      renderEmptyRecord();
+      renderQueryList();
+      setMobilePane(previous.mobilePane);
+    }
+    $("trace-content").scrollTop = previous.traceScroll;
+    $("score-details").scrollTop = previous.scoreScroll;
+    throw error;
+  }
+}
+
+replaceRecords(records);
