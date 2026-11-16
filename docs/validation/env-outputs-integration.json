@@ -1,0 +1,22 @@
+{
+  "baseline_commit": "e3b13af",
+  "branch": "codex/env-outputs-sandbox",
+  "integration_tests": {
+    "passed": 153,
+    "failed": 0,
+    "model_calls": 0
+  },
+  "lint": {
+    "tool": "ruff",
+    "status": "passed"
+  },
+  "dependency_runtime": "Existing development dependencies; ree imports explicitly resolved to this worktree source.",
+  "sensitive_content_audit": "passed; implementation, synthetic tests, documentation and aggregate validation records only",
+  "source_assets_bundled": false,
+  "external_source_modified": false,
+  "limitations": [
+    "Read-only source sweep validates input normalization, not semantic judge quality.",
+    "Actual leaf-tool smoke validates two deterministic local operations; no full server, search, embeddings, rollout or RL training.",
+    "New uv dependency download stalled and was stopped; tests used the existing compatible development environment with this worktree package source."
+  ]
+}

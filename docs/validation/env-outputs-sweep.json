@@ -1,0 +1,53 @@
+{
+  "source_commit": "1a0f569024f17c530bfd6a415ad6b8e41705002a",
+  "tasks_total": 622,
+  "tasks_ok": 618,
+  "task_failures": {
+    "ValueError: Task names undeclared tools: find_nearby_events": 4
+  },
+  "raw_total": 597,
+  "raw_ok": 539,
+  "raw_complete": 521,
+  "raw_failures": {
+    "ValueError: Task must be an existing file within the selected environment": 54,
+    "ValueError: Task names undeclared tools: find_nearby_events": 4
+  },
+  "failure_examples": {
+    "ValueError: Task names undeclared tools: find_nearby_events": [
+      "outputs/event_ticket_browse/sets/set_2/task_gen_001.json",
+      "outputs/event_ticket_browse/sets/set_5/task_gen_001.json",
+      "outputs/event_ticket_browse/sets/set_6/task_gen_001.json"
+    ],
+    "ValueError: Task must be an existing file within the selected environment": [
+      "outputs/amusement_park_family_day/conversations/set_0/task_gen_001_raw.json",
+      "outputs/amusement_park_family_day/conversations/set_3/task_gen_001_raw.json",
+      "outputs/amusement_park_ticket/conversations/set_8/task_gen_001_raw.json"
+    ]
+  },
+  "examples": [
+    {
+      "path": "outputs/aesthetic_beauty_treatment/conversations/set_0/task_gen_001_raw.json",
+      "events": 47,
+      "complete": true,
+      "artifacts": []
+    },
+    {
+      "path": "outputs/aesthetic_beauty_treatment/conversations/set_1/task_gen_001_raw.json",
+      "events": 86,
+      "complete": true,
+      "artifacts": []
+    },
+    {
+      "path": "outputs/aesthetic_beauty_treatment/conversations/set_2/task_gen_001_raw.json",
+      "events": 15,
+      "complete": true,
+      "artifacts": []
+    },
+    {
+      "path": "outputs/aesthetic_beauty_treatment/conversations/set_5/task_gen_001_raw.json",
+      "events": 65,
+      "complete": true,
+      "artifacts": []
+    }
+  ]
+}

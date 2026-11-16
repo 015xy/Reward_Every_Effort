@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "source_commit": "1a0f569024f17c530bfd6a415ad6b8e41705002a",
+  "task_path": "<external-env-outputs>/outputs/barbershop_browse/sets/set_0/task_gen_001.json",
+  "environment_tool_code": "<external-env-outputs>/outputs/barbershop_browse/tools/tool_code.py",
+  "lookup": "fetch_user_profile",
+  "mutation": "update_user_profile",
+  "network_disabled": true,
+  "semantic_search_stubbed_to_reject": true,
+  "llm_calls": 0,
+  "source_files_modified": false,
+  "artifact_checks": [
+    {
+      "status": "ok",
+      "value": true,
+      "reason": "Supplied value changed from baseline",
+      "evidence_refs": [
+        "final_state",
+        "initial_state"
+      ]
+    },
+    {
+      "status": "ok",
+      "value": true,
+      "reason": "Supplied value matches the expected JSON value",
+      "evidence_refs": [
+        "final_state"
+      ]
+    }
+  ]
+}
