@@ -372,9 +372,7 @@ function reveal(target, anchor = target) {
   target.tabIndex = -1;
   anchor.scrollIntoView?.({
     block: "center",
-    behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-      ? "auto"
-      : "smooth",
+    behavior: "auto",
   });
   target.focus?.({ preventScroll: true });
 }
@@ -397,11 +395,12 @@ function inspectButton(judgement) {
 function addPiece(
   target,
   content,
-  className = "message-body",
+  className = "message-body body",
   evidenceTarget = target,
+  tag = "div",
 ) {
   const text = pretty(content),
-    node = element("div", text, className + " evidence-piece");
+    node = element(tag, text, className + " evidence-piece");
   target.append(node);
   const piece = { node, text, target: evidenceTarget };
   evidencePieces.push(piece);
@@ -422,10 +421,10 @@ function renderTrajectory() {
     const node = element(
       "article",
       undefined,
-      "message-item " + role + " evidence-target",
+      "message-item msg " + role + " evidence-target",
     );
     node.id = "trace-" + index++;
-    const head = element("div", undefined, "message-header");
+    const head = element("div", undefined, "message-header role");
     head.append(element("b", title, "message-role"));
     if (detail) head.append(element("span", detail, "message-detail"));
     node._traceHeader = head;
@@ -433,22 +432,29 @@ function renderTrajectory() {
     target.append(node);
     return node;
   }
-  function folded(parent, label, value, observableTarget = null) {
+  function folded(
+    parent,
+    label,
+    value,
+    observableTarget = null,
+    kind = "tool",
+  ) {
     const text = pretty(value),
-      details = element("details", undefined, "trace-fold");
+      details = element("details", undefined, "trace-fold " + kind);
     const summary = element("summary");
-    summary.append(
-      element("span", label),
-      element(
-        "span",
-        t("characters", { count: [...text].length }),
-        "character-count",
-      ),
-    );
+    summary.append(element("span", label));
+    if (kind !== "call")
+      summary.append(
+        element(
+          "span",
+          t("characters", { count: [...text].length }),
+          "character-count",
+        ),
+      );
     details.append(summary);
     parent.append(details);
     if (observableTarget)
-      return addPiece(details, text, "trace-json", observableTarget);
+      return addPiece(details, text, "trace-json", observableTarget, "pre");
     details.append(element("pre", text, "trace-json"));
     return null;
   }
@@ -459,7 +465,7 @@ function renderTrajectory() {
     const details = element(
       "details",
       undefined,
-      "trace-fold recorded-reasoning",
+      "trace-fold think recorded-reasoning",
     );
     const summary = element("summary");
     summary.append(
@@ -517,7 +523,7 @@ function renderTrajectory() {
   const query = displayQuery(record),
     display = object(metadata).display_query;
   if (typeof display === "string" && display.trim()) {
-    request.append(element("div", query, "message-body"));
+    request.append(element("div", query, "message-body body"));
     const piece = folded(
       request,
       t("full_input"),
@@ -546,10 +552,7 @@ function renderTrajectory() {
           ? "tool"
           : "context";
     const title = t(role === "context" ? kind : role),
-      detail =
-        kind === "tool_call" || kind === "tool_result"
-          ? [t(kind), item.tool].filter(Boolean).join(" · ")
-          : undefined;
+      detail = kind === "tool_result" ? item.tool : undefined;
     const node = shell(role, title, detail);
     reasoning(node, item.ref, kind);
     const pieces = [];
@@ -561,7 +564,13 @@ function renderTrajectory() {
       );
     if (kind === "tool_call")
       pieces.push(
-        folded(node, t("tool_arguments"), item.arguments || {}, node),
+        folded(
+          node,
+          [t("tool_call"), item.tool].filter(Boolean).join(" · "),
+          item.arguments || {},
+          node,
+          "call",
+        ),
       );
     if (item.output !== null && item.output !== undefined)
       pieces.push(

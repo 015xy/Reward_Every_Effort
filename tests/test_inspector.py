@@ -844,9 +844,9 @@ def test_full_request_evidence_opens_original_input_without_marking_query(tmp_pa
         r"""
 const request=run('evidenceMap.get("request")');
 const fold=request.pieces[0].node.parentElement;
-const before={open:fold.open===true,text:request.pieces[0].text,query:request.target.children.find(node=>node.className==="message-body").textContent};
+const before={open:fold.open===true,text:request.pieces[0].text,query:request.target.children.find(node=>node.className==="message-body body").textContent};
 click($("flow-deduction"));
-console.log(JSON.stringify({before,open:fold.open===true,query:request.target.children.find(node=>node.className==="message-body").textContent,marks:all(request.target).filter(node=>node.tag==="mark").map(node=>({text:node.textContent,kind:node.className})),pieces:request.pieces.length}));
+console.log(JSON.stringify({before,open:fold.open===true,query:request.target.children.find(node=>node.className==="message-body body").textContent,marks:all(request.target).filter(node=>node.tag==="mark").map(node=>({text:node.textContent,kind:node.className})),pieces:request.pieces.length}));
 """,
     )
     assert values["before"] == {

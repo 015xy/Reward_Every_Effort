@@ -167,7 +167,9 @@ dialog .import-error {
 .workbench {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 410px;
+  grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   min-width: 0;
 }
 .data-pane {
@@ -250,9 +252,11 @@ select {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 .trace-header {
+  flex-shrink: 0;
   padding: 22px 27px 17px;
   border-bottom: 1px solid var(--line);
 }
@@ -274,42 +278,6 @@ select {
   font-size: 11px;
   color: var(--muted);
   overflow-wrap: anywhere;
-}
-.trace-content {
-  overflow: auto;
-  padding: 24px 27px 40px;
-}
-.message-item {
-  margin-bottom: 21px;
-}
-.message-header {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.message-header b {
-  font-weight: 600;
-  color: var(--ink);
-  font-size: 12px;
-}
-.message-body {
-  padding: 16px 18px;
-  background: var(--canvas);
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.message-item.user .message-body {
-  background: var(--blue-soft);
-}
-.message-item.assistant .message-body {
-  background: white;
-  border: 1px solid var(--line);
 }
 .event-item {
   border-left: 2px solid var(--line);
@@ -338,12 +306,6 @@ select {
   border-radius: 5px;
   max-width: 100%;
   overflow: auto;
-}
-.evidence-target:target,
-.evidence-target.selected-evidence {
-  outline: 2px solid #d1b571;
-  outline-offset: 5px;
-  border-radius: 4px;
 }
 .score-pane {
   border-left: 1px solid var(--line);
@@ -687,8 +649,7 @@ th {
   .flow-diagram {
     padding: 0 10px;
   }
-  .trace-header,
-  .trace-content {
+  .trace-header {
     padding-left: 21px;
     padding-right: 21px;
   }
@@ -787,13 +748,6 @@ th {
   .trace-header p {
     font-size: 13px;
     max-height: 65px;
-  }
-  .trace-content {
-    padding: 19px 16px 30px;
-  }
-  .message-body {
-    padding: 12px 14px;
-    font-size: 14px;
   }
   .score-pane {
     grid-row: 2;
@@ -921,9 +875,6 @@ th {
   }
   .trace-header {
     padding: 15px 16px;
-  }
-  .trace-content {
-    padding: 18px 16px;
   }
   .detail-row p,
   .criterion-item p {
@@ -1080,30 +1031,6 @@ th {
   white-space: nowrap;
   color: var(--muted);
 }
-.evidence-target.evidence-issue {
-  outline: 2px solid var(--red);
-  outline-offset: 6px;
-  border-radius: 5px;
-}
-.evidence-target.evidence-support {
-  outline: 1px solid #d6b355;
-  outline-offset: 6px;
-  border-radius: 5px;
-}
-.evidence-target.evidence-issue.evidence-support {
-  outline-style: solid;
-  outline-width: 2px;
-}
-.annotation-note {
-  font-size: 12px;
-  line-height: 1.7;
-  padding: 7px 1px 2px;
-  color: var(--red);
-  overflow-wrap: anywhere;
-}
-.annotation-note.related {
-  color: var(--amber);
-}
 mark {
   background: #ffedbd;
   color: inherit;
@@ -1169,81 +1096,155 @@ mark {
   }
 }
 
-/* Recorded role sequence and explicit evidence locations. */
-.message-item.tool {
-  border-left: 2px solid var(--line);
-  padding-left: 14px;
+/* Role blocks and disclosures follow the supplied trajectory HTML example. */
+.trace-content {
+  --trace-ink: #0b0b0b;
+  --trace-secondary: #52514e;
+  --trace-muted: #898781;
+  --trace-border: rgba(11, 11, 11, 0.09);
+  padding: 10px 12px 24px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  color: var(--trace-ink);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Noto Sans SC",
+    sans-serif;
 }
-.message-header {
+.msg {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fafaf8;
+  border: 1px solid var(--trace-border);
+}
+.msg .role {
+  display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--trace-muted);
+  margin-bottom: 4px;
 }
-.message-detail {
+.msg .message-role {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+.msg .message-detail {
+  letter-spacing: normal;
   overflow-wrap: anywhere;
 }
-.message-role {
-  letter-spacing: 0.02em;
+.msg.user {
+  background: #f4f7fc;
 }
-.trace-fold {
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
-  margin: 10px 0;
+.msg.assistant {
+  background: #f8fafd;
 }
-.trace-fold > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.msg.tool {
+  background: #f3f8f5;
+}
+.msg .body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 12px;
-  color: var(--blue);
-  list-style: none;
+  line-height: 1.55;
 }
-.trace-fold > summary::-webkit-details-marker {
-  display: none;
+.msg details.trace-fold {
+  margin: 6px 0;
+  border: 1px solid var(--trace-border);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
 }
-.trace-fold > summary:before {
-  content: "▸";
-  color: var(--muted);
+.msg details.trace-fold > summary {
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--trace-secondary);
+  background: #f4f3ef;
+  overflow-wrap: anywhere;
 }
-.trace-fold[open] > summary:before {
-  content: "▾";
+.msg details.trace-fold .trace-json {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 8px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 0;
+  background: #fff;
+  color: var(--trace-ink);
+}
+.msg details.recorded-reasoning .note {
+  margin: 0;
+  padding: 6px 8px 0;
+  font-size: 10px;
+  color: var(--trace-muted);
 }
 .character-count {
-  margin-left: auto;
   white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
 }
-.trace-fold .trace-json {
-  font-size: 12px;
-  line-height: 1.8;
-  max-height: 420px;
-  overflow: auto;
+.character-count::before {
+  content: " · ";
 }
-.recorded-reasoning .trace-json {
-  color: #637088;
+.msg.evidence-issue {
+  border: 2px solid #d03b3b;
+  box-shadow: 0 0 0 3px rgba(208, 59, 59, 0.12);
+}
+.msg.evidence-related,
+.msg.evidence-support {
+  border: 2px solid #d6b355;
+}
+.msg.evidence-issue .role {
+  color: #a52727;
+}
+.msg.evidence-related .role,
+.msg.evidence-support .role {
+  color: #85601d;
 }
 .trace-evidence-label {
+  display: inline-block;
+  margin-left: 6px;
   font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: #fff3c5;
+  font-weight: 700;
   color: #85601d;
+  background: #fff3c5;
+  border: 1px solid #e7d293;
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+  letter-spacing: normal;
 }
 .trace-evidence-label.issue {
-  background: var(--red-soft);
-  color: var(--red);
+  background: #d03b3b;
+  border-color: #d03b3b;
+  color: #fff;
 }
-.annotation-note.support,
-.annotation-note.related {
+.annotation-note {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: #fff8dc;
+  border-left: 3px solid #d6b355;
+  border-radius: 6px;
   color: #85601d;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .annotation-note.issue {
-  color: var(--red);
-}
-.evidence-target.evidence-related {
-  outline: 1px solid #d6b355;
-  outline-offset: 6px;
-  border-radius: 5px;
+  background: #fff0f0;
+  border-color: #d03b3b;
+  color: #7a1f1f;
 }
 .evidence-target.evidence-related .evidence-piece,
 .evidence-target.evidence-support:not(.has-quote) .evidence-piece {
@@ -1257,8 +1258,13 @@ mark {
   color: #842e26;
 }
 .quote-support {
-  background: #ffedbd;
-  color: inherit;
+  background: #ffe066;
+  color: #0b0b0b;
+}
+@media print {
+  .msg details.trace-fold .trace-json {
+    max-height: none;
+  }
 }
 /* Fit the audit actions in the default score pane; narrower panes scroll locally. */
 .criteria-table {
@@ -1361,16 +1367,6 @@ mark {
   margin-top: 10px;
 }
 @media (max-width: 599px) {
-  .trace-fold .trace-json {
-    font-size: 12px;
-    max-height: 360px;
-  }
-  .trace-fold > summary {
-    font-size: 12px;
-  }
-  .character-count {
-    font-size: 10px;
-  }
   .metric-row {
     font-size: 13px;
   }
