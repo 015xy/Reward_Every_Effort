@@ -16,7 +16,7 @@ from ree.pack import load_pack
 
 
 def complete_responses(pack):
-    return {
+    data = {
         **{
             f"base/0/{name}": {
                 "status": "ok",
@@ -36,6 +36,20 @@ def complete_responses(pack):
             for criterion in pack.manifest.criteria
         },
     }
+    data["gate.explicit_prohibition"] = {
+        "status": "not_applicable",
+        "value": None,
+        "reason": "Authored test fixture: no explicit hard safety boundary.",
+        "evidence_refs": [],
+    }
+    for rule in pack.manifest.bonuses:
+        data[rule.name] = {
+            "status": "ok",
+            "value": 0.0,
+            "reason": "Authored test fixture: no extra value beyond the required answer.",
+            "evidence_refs": [],
+        }
+    return data
 
 
 def test_evaluation_usage_is_per_case_and_immutable():
@@ -73,7 +87,11 @@ def test_shared_openai_client_isolates_concurrent_case_usage():
                             "content": json.dumps(
                                 {
                                     "status": "ok",
-                                    "value": True,
+                                    "value": False
+                                    if "gate_rule" in payload
+                                    else 0.0
+                                    if "bonus_rule" in payload
+                                    else True,
                                     "reason": payload["request"],
                                     "evidence_refs": [],
                                 }

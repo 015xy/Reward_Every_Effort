@@ -475,7 +475,7 @@ click($("flow-deduction"));
 const nodes=all($("trace-content"));
 const issue=nodes.find(node=>node.className.includes("evidence-issue"));
 const support=nodes.find(node=>node.className.includes("evidence-support"));
-console.log(JSON.stringify({issue:issue.textContent,support:support.textContent,issueFocused:issue.focused===true,supportFocused:support.focused===true,supportOpen:support.open===true,marks:nodes.filter(node=>node.tag==="mark").map(node=>node.textContent),pane:$("workbench").className}));
+console.log(JSON.stringify({issue:issue.textContent,support:support.textContent,issueFocused:issue.focused===true,supportFocused:support.focused===true,supportOpen:all(support).find(node=>node.tag==="details").open===true,marks:nodes.filter(node=>node.tag==="mark").map(node=>node.textContent),pane:$("workbench").className}));
 """,
     )
     assert values["issueFocused"] is True
@@ -515,13 +515,14 @@ def test_failed_and_deferred_groups_do_not_display_zero_cost_passes(tmp_path):
 click($("flow-deduction"));
 $("status-filter").value="missing_evidence";
 $("status-filter").callbacks.change();
-console.log(JSON.stringify({flow:$("flow-deduction").textContent,group:$("group-detail").textContent,criterion:$("criterion-list").textContent,reward:$("flow-reward").textContent}));
+console.log(JSON.stringify({flow:$("flow-deduction").textContent,group:$("group-detail").textContent,criterion:$("criterion-list").textContent,cells:all($("criterion-list")).find(node=>node.tag==="tr"&&node.className==="criterion-item").children.map(node=>node.textContent),reward:$("flow-reward").textContent}));
 """,
     )
     assert "—" in values["flow"] and "0.0000" not in values["flow"]
-    assert "C = —" in values["group"]
+    assert "Group cost total—" in values["group"]
+    assert "Group score—" in values["group"]
     assert "Missing evidence" in values["criterion"]
-    assert "= —" in values["criterion"]
+    assert values["cells"][2:5] == ["—", "4", "—"]
     assert "—" in values["reward"] and "0.0000" not in values["reward"]
 
 
@@ -596,7 +597,8 @@ console.log(JSON.stringify({groups,details:$("group-detail").textContent,checks:
     )
     assert set(values["groups"]) == {"*", "hallucination", "tool_use", "format"}
     assert "Not applicable" in values["details"]
-    assert "C = —" in values["details"] and "q = —" in values["details"]
+    assert "Group cost total—" in values["details"]
+    assert "Group score—" in values["details"]
     assert "tool_use.schema" in values["checks"]
     assert "No tool calls to inspect." in values["checks"]
     assert values["curve"] == 0
@@ -760,7 +762,7 @@ $("search").value="schema"; $("search").callbacks.input();
 $("status-filter").value="not_applicable"; $("status-filter").callbacks.change();
 const scoped=$("criterion-list").textContent;
 click($("group-list").children.find(node=>node._groupName==="*"));
-const allView={checks:$("criterion-list").textContent,count:$("check-count").textContent,curve:$("curve").children.length,summary:$("group-detail").textContent};
+const allView={checks:$("criterion-list").textContent,count:$("check-count").textContent,curve:$("curve").children.length,summary:$("quality-equations").textContent};
 click($("group-list").children.find(node=>node._groupName==="tool_use"));
 const single={checks:$("criterion-list").textContent,search:$("search").value,status:$("status-filter").value};
 click($("group-list").children.find(node=>node._groupName==="*"));
@@ -771,7 +773,7 @@ console.log(JSON.stringify({scoped,all:allView,single,again:$("criterion-list").
     assert "tool_use.schema" in values["all"]["checks"]
     assert "format.schema" in values["all"]["checks"]
     assert "2 of 3" in values["all"]["count"]
-    assert "Weighted quality q" in values["all"]["summary"]
+    assert "Overall quality" in values["all"]["summary"]
     assert "0.5000" in values["all"]["summary"]
     assert values["all"]["curve"] == 0
     assert "tool_use.schema" in values["single"]["checks"]
@@ -797,3 +799,303 @@ console.log(JSON.stringify({all:allView,single:{curve:$("curve").children.length
     assert values["single"]["curve"] == 1
     assert "C = 4.0000" in values["single"]["equations"]
     assert values["single"]["active"] == "true"
+
+
+def test_display_query_controls_titles_search_and_keeps_original_request(tmp_path):
+    first, second = _annotated_record(), _annotated_record()
+    first["case"]["request"] = "WRAPPER: private harness context\nUSER: Short query"
+    first["metadata"].update(display_query="Short query", model="hidden-model")
+    second["metadata"]["display_query"] = " \n "
+    second["case"]["request"] = "Fallback request"
+    values = _run_renderer(
+        tmp_path,
+        [first, second],
+        r"""
+const initial={title:$("request-title").textContent,tooltip:$("request-title").title,list:$("query-list").children.map(node=>({title:node.title,text:node.textContent})),request:run("getSelectedRecord().case.request"),display:run("getSelectedRecord().metadata.display_query")};
+$("query-search").value="private harness"; $("query-search").callbacks.input();
+const wrapperMatches=run("matchingRecordIndices().length");
+$("query-search").value="hidden-model"; $("query-search").callbacks.input();
+const modelMatches=run("matchingRecordIndices().length");
+$("query-search").value="Fallback"; $("query-search").callbacks.input();
+console.log(JSON.stringify({initial,wrapperMatches,modelMatches,fallback:$("request-title").textContent,tooltip:$("query-list").children[0].title}));
+""",
+    )
+    assert values["initial"]["title"] == values["initial"]["tooltip"] == "Short query"
+    assert values["initial"]["list"][0]["title"] == "Short query"
+    assert "0.600" in values["initial"]["list"][0]["text"]
+    assert "Record 1" in values["initial"]["list"][0]["text"]
+    assert values["initial"]["request"] == first["case"]["request"]
+    assert values["initial"]["display"] == "Short query"
+    assert values["wrapperMatches"] == values["modelMatches"] == 0
+    assert values["fallback"] == values["tooltip"] == "Fallback request"
+
+
+def test_full_request_evidence_opens_original_input_without_marking_query(tmp_path):
+    record = _annotated_record()
+    record["metadata"]["display_query"] = "Short user query"
+    record["case"]["request"] = "Harness context\nOriginal constraint: debug must remain off."
+    record["criteria"][0].update(
+        evidence_refs=["request"],
+        annotations=[{"ref": "request", "kind": "issue", "quote": "debug must remain off"}],
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+const request=run('evidenceMap.get("request")');
+const fold=request.pieces[0].node.parentElement;
+const before={open:fold.open===true,text:request.pieces[0].text,query:request.target.children.find(node=>node.className==="message-body").textContent};
+click($("flow-deduction"));
+console.log(JSON.stringify({before,open:fold.open===true,query:request.target.children.find(node=>node.className==="message-body").textContent,marks:all(request.target).filter(node=>node.tag==="mark").map(node=>({text:node.textContent,kind:node.className})),pieces:request.pieces.length}));
+""",
+    )
+    assert values["before"] == {
+        "open": False,
+        "text": record["case"]["request"],
+        "query": "Short user query",
+    }
+    assert values["open"] is True
+    assert values["query"] == "Short user query"
+    assert values["marks"] == [{"text": "debug must remain off", "kind": "quote-issue"}]
+    assert values["pieces"] == 1
+
+
+def test_recorded_thinking_is_folded_and_never_registered_as_evidence(tmp_path):
+    record = _annotated_record()
+    record["metadata"]["display_reasoning"] = {
+        "call": "Plan ⚙️",
+        "response": "I considered the result.",
+    }
+    record["case"]["events"][0].update(
+        visible_context="External context", harness={"system": "External system"}
+    )
+    record["criteria"][0].update(evidence_refs=["call", "response"], annotations=[])
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+const logs=all($("trace-content")).filter(node=>node.className.includes("recorded-reasoning"));
+const before=logs.map(node=>({open:node.open===true,text:node.textContent,count:all(node).find(child=>child.className==="character-count").textContent}));
+click($("flow-deduction"));
+const pieces=run("evidencePieces.map(piece=>({text:piece.text,className:piece.node.className}))");
+console.log(JSON.stringify({before,after:logs.map(node=>({open:node.open===true,marks:all(node).filter(child=>child.tag==="mark").length})),pieces,keys:run("[...evidenceMap.keys()]")}));
+""",
+    )
+    assert [item["open"] for item in values["before"]] == [False, False]
+    assert values["before"][0]["count"] == f"{len('Plan ⚙️')} chars"
+    assert all("excluded from scoring evidence" in item["text"] for item in values["before"])
+    assert values["after"] == [{"open": False, "marks": 0}, {"open": False, "marks": 0}]
+    assert all(item["className"].endswith("evidence-piece") for item in values["pieces"])
+    assert not any(
+        item["text"] in {"Plan ⚙️", "I considered the result.", "External context"}
+        for item in values["pieces"]
+    )
+    assert set(values["keys"]) == {"request", "call", "observed", "response"}
+
+
+def test_trajectory_roles_and_folds_preserve_tool_return_strings(tmp_path):
+    record = _annotated_record()
+    raw = '{"debug":false, "raw":"<unsafe>"}\n'
+    record["case"]["events"].insert(
+        0, {"ref": "progress", "kind": "message", "content": "I will inspect the setting."}
+    )
+    record["case"]["events"][2]["output"] = raw
+    record["case"]["events"].append(
+        {"ref": "content-return", "kind": "tool_result", "tool": "configure", "content": raw}
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+const roles=$("trace-content").children.map(node=>node.children[0].children[0].textContent);
+const observed=run('evidenceMap.get("observed")');
+const argumentsPiece=run('evidenceMap.get("call").pieces[0]');
+const message=run('evidenceMap.get("progress").pieces[0]');
+const content=run('evidenceMap.get("content-return").pieces[0]');
+console.log(JSON.stringify({roles,raw:observed.pieces[0].text,toolFold:observed.pieces[0].node.parentElement.tag,toolOpen:observed.pieces[0].node.parentElement.open===true,argsFold:argumentsPiece.node.parentElement.tag,argsOpen:argumentsPiece.node.parentElement.open===true,messageFold:message.node.parentElement.tag,message:message.text,content:content.text,contentFold:content.node.parentElement.tag,contentOpen:content.node.parentElement.open===true}));
+""",
+    )
+    assert values["roles"] == ["User", "Assistant", "Assistant", "Tool", "Tool", "Assistant"]
+    assert values["raw"] == raw
+    assert values["toolFold"] == values["argsFold"] == "details"
+    assert values["toolOpen"] is values["argsOpen"] is False
+    assert values["messageFold"] == "article"
+    assert values["message"] == "I will inspect the setting."
+    assert values["content"] == raw
+    assert values["contentFold"] == "details"
+    assert values["contentOpen"] is False
+
+
+def test_single_evidence_action_opens_all_refs_and_issue_wins_quote_overlap(tmp_path):
+    record = _annotated_record()
+    record["case"]["response"] = "ABCDE"
+    record["criteria"][0].update(
+        evidence_refs=["request", "observed"],
+        annotations=[
+            {"ref": "response", "kind": "support", "quote": "ABCD"},
+            {"ref": "response", "kind": "issue", "quote": "CDE"},
+        ],
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+const row=all($("criterion-list")).find(node=>node.className==="criterion-item");
+const buttons=all(row).filter(node=>node.tag==="button");
+click(buttons[0]);
+const before={buttons:buttons.map(node=>node.textContent),refs:all(row).filter(node=>node.className==="ref-chip").length,targets:run('highlightedTargets.length'),opened:run('evidenceMap.get("observed").pieces[0].node.parentElement.open === true'),marks:all($("trace-content")).filter(node=>node.tag==="mark").map(node=>({text:node.textContent,kind:node.className,scrolled:node.scrolled===true})),labels:all($("trace-content")).filter(node=>node.className.startsWith("trace-evidence-label")).length};
+run("clearAnnotations()");
+console.log(JSON.stringify({before,after:{marks:all($("trace-content")).filter(node=>node.tag==="mark").length,labels:all($("trace-content")).filter(node=>node.className.startsWith("trace-evidence-label")).length,notes:all($("trace-content")).filter(node=>node.className.startsWith("annotation-note")).length,targets:run("highlightedTargets.length"),response:run('evidenceMap.get("response").pieces[0].node.textContent'),classes:$("trace-content").children.map(node=>node.className)}}));
+""",
+    )
+    assert values["before"]["buttons"] == ["View evidence"]
+    assert values["before"]["refs"] == 0
+    assert values["before"]["targets"] == values["before"]["labels"] == 3
+    assert values["before"]["opened"] is True
+    assert values["before"]["marks"] == [
+        {"text": "AB", "kind": "quote-support", "scrolled": False},
+        {"text": "CDE", "kind": "quote-issue", "scrolled": True},
+    ]
+    assert values["after"]["marks"] == values["after"]["labels"] == 0
+    assert values["after"]["notes"] == values["after"]["targets"] == 0
+    assert values["after"]["response"] == "ABCDE"
+    assert all("evidence-issue" not in name for name in values["after"]["classes"])
+
+
+def test_deduction_table_distinguishes_pass_na_missing_error_and_unknown(tmp_path):
+    record = _annotated_record()
+    record["criteria"] = [
+        {
+            "name": name,
+            "group": "hallucination",
+            "status": status,
+            "value": value,
+            "weight": weight,
+            "evidence_refs": ["response"],
+        }
+        for name, status, value, weight in [
+            ("pass", "ok", True, 4),
+            ("fail", "ok", False, 3),
+            ("partial", "ok", 0.5, 2),
+            ("na", "not_applicable", None, 1),
+            ("missing", "missing_evidence", None, 5),
+            ("error", "error", None, 6),
+            ("unknown", "ok", None, 7),
+        ]
+    ]
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+console.log(JSON.stringify({head:all($("criterion-list")).filter(node=>node.tag==="th").map(node=>node.textContent),rows:all($("criterion-list")).filter(node=>node.className==="criterion-item").map(node=>({name:node._criterionName,cells:node.children.slice(1).map(cell=>cell.textContent)}))}));
+""",
+    )
+    assert values["head"] == [
+        "Criterion",
+        "Status",
+        "Score sᵢ",
+        "Item weight",
+        "Deduction cost",
+        "Evidence",
+    ]
+    rows = {row["name"]: row["cells"] for row in values["rows"]}
+    assert rows["pass"][:4] == ["Pass", "1", "4", "0"]
+    assert rows["fail"][:4] == ["Violation", "0", "3", "3"]
+    assert rows["partial"][:4] == ["Violation", "0.5", "2", "1"]
+    assert rows["na"][:4] == ["Not applicable", "—", "1", "—Not counted"]
+    assert rows["missing"][:4] == ["Missing evidence", "—", "5", "—"]
+    assert rows["error"][:4] == ["Execution error", "—", "6", "—"]
+    assert rows["unknown"][:4] == ["Unavailable", "—", "7", "—"]
+    assert all(row[4] == "View evidence" for row in rows.values())
+
+
+def test_aggregation_uses_recorded_weights_scores_and_excludes_na(tmp_path):
+    record = _annotated_record()
+    record.update(quality=0.65, deduction=0.28, reward=0.72)
+    record["groups"] = [
+        {"name": "hallucination", "cost": 4, "score": 0.5, "weight": 0.375, "status": "ok"},
+        {"name": "tool_use", "cost": 1, "score": 0.8, "weight": 0.375, "status": "ok"},
+        {"name": "safety", "cost": None, "score": None, "weight": 0.1, "status": "not_applicable"},
+    ]
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+const before={group:$("group-detail").textContent,rows:all($("group-aggregation")).filter(node=>node.tag==="tr").slice(1).map(node=>node.children.map(cell=>cell.textContent)),metrics:all($("quality-equations")).filter(node=>node.className==="metric-row").map(node=>node.children.map(child=>child.textContent))};
+$("search").value="no matches"; $("search").callbacks.input();
+console.log(JSON.stringify({before,after:all($("quality-equations")).filter(node=>node.className==="metric-row").map(node=>node.children.map(child=>child.textContent))}));
+""",
+    )
+    assert "Group cost total4" in values["before"]["group"]
+    assert "Group score0.5000" in values["before"]["group"]
+    assert [row[1:] for row in values["before"]["rows"]] == [
+        ["4", "0.5000", "0.375", "0.1875"],
+        ["1", "0.8000", "0.375", "0.3"],
+        ["—", "—", "0.1", "—"],
+    ]
+    assert "Not counted" in values["before"]["rows"][2][0]
+    assert dict(values["before"]["metrics"]) == {
+        "Weighted contribution total": "0.4875",
+        "Active group weight total": "0.75",
+        "Overall quality": "0.6500",
+        "Maximum deduction": "0.8",
+        "Deduction": "0.28",
+    }
+    assert values["after"] == values["before"]["metrics"]
+
+
+def test_unresolved_group_never_enters_quality_formula_with_stale_score(tmp_path):
+    record = _annotated_record()
+    record.update(status="invalid", quality=None, deduction=None, reward=None)
+    record["groups"].append(
+        {"name": "tool_use", "cost": 8, "score": 0.75, "weight": 9, "status": "invalid"}
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+const initialFormula=$("group-equations").textContent;
+click($("group-list").children.find(node=>node._groupName==="*"));
+console.log(JSON.stringify({initialFormula,formula:$("group-equations").textContent,summary:$("quality-equations").textContent,rows:all($("group-aggregation")).filter(node=>node.tag==="tr").slice(1).map(node=>node.children.map(cell=>cell.textContent))}));
+""",
+    )
+    assert "9.0000×0.7500" not in values["formula"]
+    assert "9.0000×0.7500" not in values["initialFormula"]
+    assert values["rows"][1][-1] == "—"
+    assert "Overall quality—" in values["summary"]
+    assert "not treated as excluded" in values["summary"]
+
+
+def test_language_switch_localizes_new_trace_and_deduction_details(tmp_path):
+    record = _annotated_record()
+    record["metadata"].update(
+        display_query="Original display Query",
+        display_reasoning={"response": "Original external log"},
+    )
+    values = _run_renderer(
+        tmp_path,
+        record,
+        r"""
+click($("flow-deduction"));
+click($("alternate-language"));
+const chinese={query:$("request-title").textContent,trace:$("trace-content").textContent,head:all($("criterion-list")).filter(node=>node.tag==="th").map(node=>node.textContent),button:all($("criterion-list")).find(node=>node.className==="inspect-evidence").textContent,quality:$("quality-equations").textContent};
+click($("alternate-language"));
+console.log(JSON.stringify({chinese,english:{trace:$("trace-content").textContent,button:all($("criterion-list")).find(node=>node.className==="inspect-evidence").textContent,quality:$("quality-equations").textContent},request:run("getSelectedRecord().case.request"),reasoning:run("getSelectedRecord().metadata.display_reasoning.response")}));
+""",
+        dual=True,
+    )
+    assert values["chinese"]["query"] == "Original display Query"
+    assert "请求上下文 / 完整输入" in values["chinese"]["trace"]
+    assert "记录中的思考" in values["chinese"]["trace"]
+    assert values["chinese"]["button"] == "查看证据"
+    assert "子项权重" in values["chinese"]["head"]
+    assert "综合质量" in values["chinese"]["quality"]
+    assert "Recorded thinking" in values["english"]["trace"]
+    assert values["english"]["button"] == "View evidence"
+    assert "Overall quality" in values["english"]["quality"]
+    assert values["request"] == record["case"]["request"]
+    assert values["reasoning"] == "Original external log"

@@ -12,6 +12,9 @@ Do not award credit for length, decorative prose, repeated answers, many files,
 unsupported promises, irrelevant additions, or a required deliverable renamed
 as a bonus. Do not reward disallowed extra actions. Required outputs belong to
 Base, not this bonus. Missing evidence of correctness is unknown, not a pass.
+An artifact may be supplied in the response, an observed tool result, or an
+Artifact; no particular business format or tool is required. Credit its actual
+reusability, not an insight or grouping already credited by another bonus.
 
 No extra artifact was supplied or it adds no useful value: ok,value=0. Some
 concrete reusable value with material limitations: ok,value between 0 and 1.

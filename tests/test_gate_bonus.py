@@ -15,7 +15,13 @@ def customized_pack(tmp_path, *, gate=False, bonus=False, table=None):
     shutil.copytree(original.root, root)
     manifest = original.manifest
     manifest.gates[0].enabled = gate
+    # This isolated runtime fixture uses one explicitly configured 0.1 bonus;
+    # it does not redefine the production policy's three default maxima.
+    manifest.bonuses = [
+        next(rule for rule in manifest.bonuses if rule.name == "bonus.reusable_artifact")
+    ]
     manifest.bonuses[0].enabled = bonus
+    manifest.bonuses[0].max_value = 0.1
     if table is not None:
         manifest.profile.table = table
     (root / "manifest.json").write_text(manifest.model_dump_json())
@@ -32,6 +38,21 @@ def case():
 
 def responses(pack):
     return {
+        "gate.explicit_prohibition": {
+            "status": "not_applicable",
+            "value": None,
+            "reason": "Authored fixture: no explicit hard safety boundary.",
+            "evidence_refs": [],
+        },
+        **{
+            rule.name: {
+                "status": "ok",
+                "value": 0.0,
+                "reason": "Authored fixture: no additional value beyond the required update.",
+                "evidence_refs": [],
+            }
+            for rule in pack.manifest.bonuses
+        },
         **{
             f"base/0/{name}": {
                 "status": "ok",
@@ -75,20 +96,62 @@ def bonus_rule(**kwargs):
     )
 
 
-def test_default_reference_policies_are_real_but_disabled():
+def test_default_policies_execute_explicit_facts_without_task_adaptation():
     pack = load_pack()
     client = TrackedReplay(responses(pack))
     record = evaluate(case(), client, pack)
     assert record["status"] == "ok"
     assert record["gate"]["status"] == "admitted"
-    assert record["gate"]["checks"][0]["status"] == "disabled"
+    assert record["gate"]["checks"][0]["status"] == "not_applicable"
     assert record["bonus"] == 0
-    assert record["bonus_details"]["status"] == "disabled"
+    assert record["bonus_details"]["status"] == "ok"
     assert record["composition"]["path"] == "normal"
     assert record["composition"]["before_clip"] == 1
-    assert not any(name.startswith(("gate.", "bonus.")) for name in client.calls)
+    assert client.calls[0] == "gate.explicit_prohibition"
+    assert set(rule.name for rule in pack.manifest.bonuses).issubset(client.calls)
+    assert pack.manifest.version == "0.2.0"
+    assert pack.manifest.profile.group_weights == {
+        "safety": 0.10,
+        "tool_use": 0.375,
+        "hallucination": 0.375,
+        "format": 0.15,
+    }
+    assert [rule.max_value for rule in pack.manifest.bonuses] == [0.04, 0.03, 0.03]
+    assert all(
+        rule.enabled
+        and rule.min_base == 1
+        and rule.min_quality == 0.9
+        and rule.require_all_subjects
+        for rule in pack.manifest.bonuses
+    )
     assert pack.prompt(pack.manifest.gates[0].prompt)
     assert pack.prompt(pack.manifest.bonuses[0].prompt)
+
+
+@pytest.mark.parametrize(
+    "missing_name", ["gate.explicit_prohibition", "bonus.insightful_synthesis"]
+)
+def test_default_policy_missing_replay_fact_cannot_invent_admission_or_extra_credit(missing_name):
+    pack = load_pack()
+    facts = responses(pack)
+    del facts[missing_name]
+    record = evaluate(case(), TrackedReplay(facts), pack)
+    assert record["status"] == "invalid" and record["reward"] is None
+    assert any(missing_name in error for error in record["errors"])
+
+
+def test_default_bonus_does_not_reward_honest_failure_despite_base_one():
+    pack = load_pack()
+    facts = responses(pack)
+    facts["base/0/result"]["value"] = False
+    failed_case = case()
+    failed_case.response = "The external operation failed; the requested change is not complete."
+    client = TrackedReplay(facts)
+    record = evaluate(failed_case, client, pack)
+    assert record["status"] == "ok" and record["base"] == 1
+    assert record["subjects"][0]["row"] == 3
+    assert record["bonus"] == 0 and record["bonus_details"]["status"] == "ineligible"
+    assert not any(name.startswith("bonus.") for name in client.calls)
 
 
 def test_gate_priority_routes_directly_without_running_downstream(tmp_path):
@@ -250,8 +313,8 @@ def test_enabled_bonus_missing_evidence_invalidates_reward(tmp_path):
     assert record["composition"]["deduction"] == 0
 
 
-def test_labeler_failure_preserves_declared_downstream_checks():
-    pack = load_pack()
+def test_labeler_failure_preserves_declared_downstream_checks(tmp_path):
+    pack = customized_pack(tmp_path)
     record = evaluate(
         Case(request="Update a configuration.", response="Updated."), ReplayJudge({}), pack
     )

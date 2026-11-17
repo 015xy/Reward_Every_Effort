@@ -64,14 +64,19 @@ async function run() {
   assert.equal(context.records[0].reward, 1, 'failed import preserves prior data');
   assert.equal($('data-dialog').open, true);
   assert.equal($('import-error').hidden, false);
-  $('data-text').value = '{"status":"invalid","case":{"request":"new query"}}';
+  $('data-text').value = JSON.stringify({status: 'invalid', case: {request: 'new query'},
+    metadata: {display_query: 'Only the displayed query', display_reasoning: {response: 'Already provided thought\nFull original text'}}});
   $('load-pasted').handlers.click();
   assert.equal(context.records[0].case.request, 'new query');
   assert.equal($('data-dialog').open, false);
   assert.match($('data-feedback').textContent, /Loaded 1 records/);
 
   $('export-record').handlers.click();
-  assert.equal(JSON.parse(await downloaded.text()).case.request, 'new query');
+  const exported = JSON.parse(await downloaded.text());
+  assert.equal(exported.case.request, 'new query');
+  assert.equal(exported.metadata.display_query, 'Only the displayed query');
+  assert.equal(exported.metadata.display_reasoning.response, 'Already provided thought\nFull original text');
+  assert.deepEqual(JSON.parse(JSON.stringify(parse(JSON.stringify(exported))[0].metadata)), exported.metadata);
   assert.equal(downloadLink.clicked, true);
   assert.equal(downloadLink.download, 'reward-record-1.json');
 

@@ -155,6 +155,24 @@ def test_verifier_composes_as_registered_plugin_and_base_evidence():
         model = "test-fixture"
 
         def judge(self, name, prompt, payload, schema):
+            if name == "gate.explicit_prohibition":
+                return schema.model_validate(
+                    {
+                        "status": "not_applicable",
+                        "value": None,
+                        "reason": "Fixture contains no hard safety boundary",
+                        "evidence_refs": [],
+                    }
+                )
+            if name.startswith("bonus."):
+                return schema.model_validate(
+                    {
+                        "status": "ok",
+                        "value": 0.0,
+                        "reason": "Fixture supplies only the required configuration",
+                        "evidence_refs": [],
+                    }
+                )
             if name.startswith("base/"):
                 assert any(item["ref"] == "verify/timeout" for item in payload["events"])
             return schema.model_validate(

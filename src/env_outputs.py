@@ -2,6 +2,7 @@
 
 No environment code or data is bundled; the caller supplies explicit local paths.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,8 +15,17 @@ from ree.models import Artifact, Case, Event, Harness, Message, TaskContext, Too
 from ree.pack import LoadedPack, load_pack
 
 _CREDENTIAL_KEYS = {
-    "api_key", "api_keys", "apikey", "app_ids", "access_token", "refresh_token",
-    "client_secret", "password", "authorization", "secret", "secret_key",
+    "api_key",
+    "api_keys",
+    "apikey",
+    "app_ids",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "password",
+    "authorization",
+    "secret",
+    "secret_key",
 }
 _STATE_REQUIREMENT = (
     "For state-changing environment operations, evaluate claimed mutations against supplied "
@@ -63,8 +73,11 @@ final_state, response, and observed event refs. Never return hidden reasoning.
 def _sanitize(value: Any) -> Any:
     """Remove structured transport credentials, retaining task evidence and schemas."""
     if isinstance(value, dict):
-        return {str(k): _sanitize(v) for k, v in value.items()
-                if str(k).lower().replace("-", "_") not in _CREDENTIAL_KEYS}
+        return {
+            str(k): _sanitize(v)
+            for k, v in value.items()
+            if str(k).lower().replace("-", "_") not in _CREDENTIAL_KEYS
+        }
     if isinstance(value, list):
         return [_sanitize(v) for v in value]
     if isinstance(value, str):
@@ -76,8 +89,12 @@ def _sanitize(value: Any) -> Any:
 def _redact_credentials(value: Any) -> Any:
     """Keep evidence field names/schema structure while masking credential values."""
     if isinstance(value, dict):
-        return {str(k): "[redacted]" if str(k).lower().replace("-", "_") in _CREDENTIAL_KEYS
-                else _redact_credentials(v) for k, v in value.items()}
+        return {
+            str(k): "[redacted]"
+            if str(k).lower().replace("-", "_") in _CREDENTIAL_KEYS
+            else _redact_credentials(v)
+            for k, v in value.items()
+        }
     if isinstance(value, list):
         return [_redact_credentials(v) for v in value]
     return _sanitize(value)
@@ -85,16 +102,20 @@ def _redact_credentials(value: Any) -> Any:
 
 def _state_dump(value: Any) -> str:
     """Reject state credential fields instead of falsifying field absence or values."""
+
     def check(item):
         if isinstance(item, dict):
             for key, child in item.items():
                 if str(key).lower().replace("-", "_") in _CREDENTIAL_KEYS:
-                    raise ValueError("State snapshot contains a credential field; supply no snapshot "
-                                     "rather than deleting fields or inventing redacted state values")
+                    raise ValueError(
+                        "State snapshot contains a credential field; supply no snapshot "
+                        "rather than deleting fields or inventing redacted state values"
+                    )
                 check(child)
         elif isinstance(item, list):
             for child in item:
                 check(child)
+
     check(value)
     # State is actual evaluator evidence. Preserve fields and values exactly.
     return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
@@ -131,8 +152,11 @@ def _tools(declarations: Any) -> list[Tool]:
         fn = declaration.get("function", declaration)
         if not isinstance(fn, dict) or not fn.get("name"):
             raise ValueError("Tool declaration has no function name")
-        tool = Tool(name=fn["name"], description=fn.get("description", ""),
-                    parameters=fn.get("parameters", fn.get("input_schema")))
+        tool = Tool(
+            name=fn["name"],
+            description=fn.get("description", ""),
+            parameters=fn.get("parameters", fn.get("input_schema")),
+        )
         if tool.name in result and result[tool.name] != tool:
             raise ValueError("Conflicting declarations for tool " + tool.name)
         result[tool.name] = tool
@@ -172,32 +196,68 @@ def load_task_context(task_path: str | Path, environment_path: str | Path) -> Ta
         tools = [t for t in tools if t.name in names]
     prompt = _sanitize(_safe_read(root, "prompts/system.txt"))
     combo_path = root / "harness_combo.json"
-    combo = _sanitize(json.loads(_safe_read(root, "harness_combo.json"))) if combo_path.exists() else {}
+    combo = (
+        _sanitize(json.loads(_safe_read(root, "harness_combo.json"))) if combo_path.exists() else {}
+    )
     skills = []
     for path in sorted((root / "skills").glob("*.skill.md")):
-        skills.append({"name": path.name, "content": _sanitize(_safe_read(root, str(path.relative_to(root))))})
-    harness = Harness(system_prompt=prompt, tools=tools, skills=skills,
-                      compression=combo.get("compact", {})).model_dump(mode="json")
+        skills.append(
+            {"name": path.name, "content": _sanitize(_safe_read(root, str(path.relative_to(root))))}
+        )
+    harness = Harness(
+        system_prompt=prompt, tools=tools, skills=skills, compression=combo.get("compact", {})
+    ).model_dump(mode="json")
     # Reference strings are evaluator context; no path is later auto-opened.
     references = [
-        "Environment runtime identity: " + _dump({"environment": root.name,
-            "task_id": task.get("task_id"), "task_mode": task.get("task_mode")}),
-        "Trusted task time/location: " + _dump({
-            "current_datetime": task.get("current_datetime") or task.get("current_date", ""),
-            "user_location": task.get("user_location", {})}),
-        "Declared harness limits: " + _dump({k: combo[k] for k in (
-            "max_rounds", "max_tool_call_num", "tool_content_max_chars", "memory_enabled",
-            "compact_strategy", "use_skill_hiding") if k in combo}),
+        "Environment runtime identity: "
+        + _dump(
+            {
+                "environment": root.name,
+                "task_id": task.get("task_id"),
+                "task_mode": task.get("task_mode"),
+            }
+        ),
+        "Trusted task time/location: "
+        + _dump(
+            {
+                "current_datetime": task.get("current_datetime") or task.get("current_date", ""),
+                "user_location": task.get("user_location", {}),
+            }
+        ),
+        "Declared harness limits: "
+        + _dump(
+            {
+                k: combo[k]
+                for k in (
+                    "max_rounds",
+                    "max_tool_call_num",
+                    "tool_content_max_chars",
+                    "memory_enabled",
+                    "compact_strategy",
+                    "use_skill_hiding",
+                )
+                if k in combo
+            }
+        ),
     ]
     if "checklist_deps" in task:
-        references.append("Trusted checklist topology (not Subject annotations; optional edges are optional): "
-                          + _dump(task["checklist_deps"]))
+        references.append(
+            "Trusted checklist topology (not Subject annotations; optional edges are optional): "
+            + _dump(task["checklist_deps"])
+        )
     if rubric.get("加分项"):
-        references.append("Optional bonus conditions, not mandatory acceptance: " + _dump(rubric["加分项"]))
+        references.append(
+            "Optional bonus conditions, not mandatory acceptance: " + _dump(rubric["加分项"])
+        )
     if task.get("user_profile"):
         references.append("Task-provided user preferences/context: " + _dump(task["user_profile"]))
-    return TaskContext(task_description=description, success_criteria=criteria,
-                       constraints=constraints, harness=harness, references=references)
+    return TaskContext(
+        task_description=description,
+        success_criteria=criteria,
+        constraints=constraints,
+        harness=harness,
+        references=references,
+    )
 
 
 def _text(content: Any) -> str:
@@ -221,8 +281,11 @@ def _message(message: dict) -> dict:
     if not isinstance(message, dict):
         raise ValueError("Each trajectory message must be an object")
     if message.get("type") == "attachment":
-        return {"role": "context", "content": _text(message.get("content")),
-                "attachment_type": message.get("attachment_type", "unknown")}
+        return {
+            "role": "context",
+            "content": _text(message.get("content")),
+            "attachment_type": message.get("attachment_type", "unknown"),
+        }
     role = message.get("role")
     if role not in {"system", "user", "assistant", "tool"}:
         raise ValueError("Unsupported trajectory role")
@@ -241,8 +304,11 @@ def _message(message: dict) -> dict:
                     pass  # append_call rejects malformed arguments explicitly.
     blocks = message.get("content")
     if isinstance(blocks, list):
-        observable = [_redact_credentials(b) for b in blocks if isinstance(b, dict)
-                      and b.get("type") in {"tool_use", "tool_result"}]
+        observable = [
+            _redact_credentials(b)
+            for b in blocks
+            if isinstance(b, dict) and b.get("type") in {"tool_use", "tool_result"}
+        ]
         if observable:
             result["blocks"] = observable
     return result
@@ -252,8 +318,9 @@ def _same(left: dict, right: dict) -> bool:
     return left == right
 
 
-def _merge_messages(ledger: list[dict], current: list[dict],
-                    compressed: bool = False) -> tuple[list[dict], bool]:
+def _merge_messages(
+    ledger: list[dict], current: list[dict], compressed: bool = False
+) -> tuple[list[dict], bool]:
     """Append newly observed suffix, preserving old evidence across compression.
 
     Repeated messages are compared positionally, not deduplicated by a global set.
@@ -264,6 +331,7 @@ def _merge_messages(ledger: list[dict], current: list[dict],
         return list(current), True
     if not current:
         return list(ledger), True
+
     # Some harness compression keeps message slots and call IDs, replacing only
     # old textual content. That is a changed model-visible context, not new calls.
     # Keep the original observable evidence when it was already recorded.
@@ -273,18 +341,22 @@ def _merge_messages(ledger: list[dict], current: list[dict],
         if not compressed or old.get("role") != incoming.get("role"):
             return False
         if old.get("role") == "tool":
-            return bool(old.get("tool_call_id") and
-                        {k: v for k, v in old.items() if k != "content"} ==
-                        {k: v for k, v in incoming.items() if k != "content"})
+            return bool(
+                old.get("tool_call_id")
+                and {k: v for k, v in old.items() if k != "content"}
+                == {k: v for k, v in incoming.items() if k != "content"}
+            )
         if old.get("role") == "assistant" and old.get("tool_calls"):
             return old.get("tool_calls") == incoming.get("tool_calls")
         return False
-    if len(current) >= len(ledger) and all(equivalent(old, incoming)
-                                          for old, incoming in zip(ledger, current, strict=False)):
-        return ledger + current[len(ledger):], True
-    if len(current) >= len(ledger) and current[:len(ledger)] == ledger:
-        return ledger + current[len(ledger):], True
-    if len(current) <= len(ledger) and ledger[:len(current)] == current:
+
+    if len(current) >= len(ledger) and all(
+        equivalent(old, incoming) for old, incoming in zip(ledger, current, strict=False)
+    ):
+        return ledger + current[len(ledger) :], True
+    if len(current) >= len(ledger) and current[: len(ledger)] == ledger:
+        return ledger + current[len(ledger) :], True
+    if len(current) <= len(ledger) and ledger[: len(current)] == current:
         return list(ledger), True
     common = 0
     for old, incoming in zip(ledger, current, strict=False):
@@ -295,28 +367,42 @@ def _merge_messages(ledger: list[dict], current: list[dict],
     # model-input messages. Retain its observed text, then append the new user turn.
     # Only use this shortcut for a text-only tail; never replay calls or results.
     omitted = ledger[common:]
-    if common and omitted and all(m["role"] == "assistant" and not m.get("tool_calls")
-                                  and not m.get("blocks") for m in omitted):
+    if (
+        common
+        and omitted
+        and all(
+            m["role"] == "assistant" and not m.get("tool_calls") and not m.get("blocks")
+            for m in omitted
+        )
+    ):
         return ledger + current[common:], True
     # Longest ledger suffix represented contiguously in the incoming snapshot.
     # This handles a compression-summary prefix followed by retained old messages.
     for length in range(min(len(ledger), len(current)), 0, -1):
         suffix = ledger[-length:]
         for start in range(len(current) - length + 1):
-            if all(equivalent(old, incoming) for old, incoming in
-                   zip(suffix, current[start:start + length], strict=True)):
+            if all(
+                equivalent(old, incoming)
+                for old, incoming in zip(suffix, current[start : start + length], strict=True)
+            ):
                 prefix = current[:start]
                 # Preserve every newly presented prefix message. A non-context prefix
                 # can be a new user turn, not necessarily a compression summary.
                 # Its order relative to the old overlap cannot be fully reconstructed.
-                safe_prefix = all(m.get("role") in {"system", "context"} or m.get("isMeta")
-                                  or m.get("isVirtual") for m in prefix)
-                return ledger + prefix + current[start + length:], safe_prefix
+                safe_prefix = all(
+                    m.get("role") in {"system", "context"} or m.get("isMeta") or m.get("isVirtual")
+                    for m in prefix
+                )
+                return ledger + prefix + current[start + length :], safe_prefix
     return ledger + current, False
 
 
-def normalize_trajectory(raw: dict, context: TaskContext, final_state: dict | None = None,
-                         initial_state: dict | None = None) -> Case:
+def normalize_trajectory(
+    raw: dict,
+    context: TaskContext,
+    final_state: dict | None = None,
+    initial_state: dict | None = None,
+) -> Case:
     """Normalize observed snapshots into a generic Case without fabricating state.
 
     Supports OpenAI cumulative dictionary snapshots and legacy lists containing
@@ -366,21 +452,31 @@ def normalize_trajectory(raw: dict, context: TaskContext, final_state: dict | No
                 current.append(candidate)
         for message_index, message in enumerate(current):
             identifiers = [call.get("id") for call in message.get("tool_calls", [])]
-            identifiers += [block.get("id") for block in message.get("blocks", [])
-                            if block.get("type") == "tool_use"]
+            identifiers += [
+                block.get("id")
+                for block in message.get("blocks", [])
+                if block.get("type") == "tool_use"
+            ]
             for identifier in identifiers:
                 if identifier and identifier not in call_harnesses:
                     call_harnesses[identifier] = active_harness.model_copy(deep=True)
                     call_visible_contexts[identifier] = json.dumps(
-                        _redact_credentials(current[:message_index]), ensure_ascii=False, sort_keys=True)
-        merged, observed_overlap = _merge_messages(previous_snapshot, current,
-            compressed=bool(isinstance(snapshot, dict) and snapshot.get("compressed")))
-        ledger.extend(merged[len(previous_snapshot):])
+                        _redact_credentials(current[:message_index]),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+        merged, observed_overlap = _merge_messages(
+            previous_snapshot,
+            current,
+            compressed=bool(isinstance(snapshot, dict) and snapshot.get("compressed")),
+        )
+        ledger.extend(merged[len(previous_snapshot) :])
         # Align successive snapshots, not the accumulated evidence ledger: an old
         # separately returned reply can be absent from all later model-input lists.
         # Keep a newer/larger predecessor when a snapshot is merely an old prefix.
-        if not (len(current) < len(previous_snapshot)
-                and previous_snapshot[:len(current)] == current):
+        if not (
+            len(current) < len(previous_snapshot) and previous_snapshot[: len(current)] == current
+        ):
             previous_snapshot = current
         complete = complete and observed_overlap
     if not ledger:
@@ -407,18 +503,32 @@ def normalize_trajectory(raw: dict, context: TaskContext, final_state: dict | No
             raise ValueError("Tool call arguments must be an object")
         ref = f"env/event/{len(events)}"
         calls[call_id], call_names[call_id] = ref, name
-        events.append(Event(ref=ref, kind="tool_call", tool=name, arguments=_redact_credentials(arguments),
-                            harness=call_harnesses.get(call_id),
-                            visible_context=call_visible_contexts.get(call_id)))
+        events.append(
+            Event(
+                ref=ref,
+                kind="tool_call",
+                tool=name,
+                arguments=_redact_credentials(arguments),
+                harness=call_harnesses.get(call_id),
+                visible_context=call_visible_contexts.get(call_id),
+            )
+        )
 
     def append_result(call_id: str, output: Any, is_error: bool = False, name: str | None = None):
         if call_id not in calls:
             raise ValueError("Tool result has no observed corresponding call: " + str(call_id))
         if name and name != call_names[call_id]:
             raise ValueError("Tool result name conflicts with its corresponding call")
-        events.append(Event(ref=f"env/event/{len(events)}", kind="tool_result",
-            tool=call_names[call_id], call_ref=calls[call_id], output=_sanitize(output),
-            error="Observed tool error" if is_error else None))
+        events.append(
+            Event(
+                ref=f"env/event/{len(events)}",
+                kind="tool_result",
+                tool=call_names[call_id],
+                call_ref=calls[call_id],
+                output=_sanitize(output),
+                error="Observed tool error" if is_error else None,
+            )
+        )
 
     for message in ledger:
         role, text = message["role"], message.get("content", "")
@@ -430,45 +540,89 @@ def normalize_trajectory(raw: dict, context: TaskContext, final_state: dict | No
         elif role == "context" or message.get("isMeta") or message.get("isVirtual"):
             events.append(Event(ref=f"env/event/{len(events)}", kind="context", content=text))
         elif role in {"user", "assistant"}:
-            events.append(Event(ref=f"env/event/{len(events)}", kind="message", content=text,
-                                output={"role": role}))
+            events.append(
+                Event(
+                    ref=f"env/event/{len(events)}",
+                    kind="message",
+                    content=text,
+                    output={"role": role},
+                )
+            )
             history.append(Message(role=role, content=text))
         if message.get("tool_calls"):
             for call in message["tool_calls"]:
                 fn = call.get("function", {})
                 append_call(call.get("id"), fn.get("name", ""), fn.get("arguments", {}))
         if role == "tool":
-            append_result(message.get("tool_call_id"), text, bool(message.get("is_error")), message.get("name"))
+            append_result(
+                message.get("tool_call_id"),
+                text,
+                bool(message.get("is_error")),
+                message.get("name"),
+            )
         for block in message.get("blocks", []):
             if block["type"] == "tool_use":
                 append_call(block.get("id"), block.get("name", ""), block.get("input", {}))
             else:
-                append_result(block.get("tool_use_id"), _text(block.get("content")), bool(block.get("is_error")))
-    terminal = [m for m in ledger if m["role"] not in {"system", "context"}
-                and not m.get("isMeta") and not m.get("isVirtual")]
+                append_result(
+                    block.get("tool_use_id"),
+                    _text(block.get("content")),
+                    bool(block.get("is_error")),
+                )
+    terminal = [
+        m
+        for m in ledger
+        if m["role"] not in {"system", "context"} and not m.get("isMeta") and not m.get("isVirtual")
+    ]
     last = terminal[-1] if terminal else None
-    is_final = bool(last and last["role"] == "assistant" and not last.get("tool_calls")
-                    and not any(b.get("type") == "tool_use" for b in last.get("blocks", [])))
+    is_final = bool(
+        last
+        and last["role"] == "assistant"
+        and not last.get("tool_calls")
+        and not any(b.get("type") == "tool_use" for b in last.get("blocks", []))
+    )
     response = last.get("content", "") if is_final else ""
     if not is_final or not response:
         complete = False
     extra = raw.get("extra_info", {})
-    if final_state is None and isinstance(extra, dict) and isinstance(extra.get("final_state"), dict):
+    if (
+        final_state is None
+        and isinstance(extra, dict)
+        and isinstance(extra.get("final_state"), dict)
+    ):
         final_state = extra["final_state"]
     artifacts = []
     if initial_state is not None:
-        artifacts.append(Artifact(ref="initial_state", name="initial_state", content=_state_dump(initial_state)))
+        artifacts.append(
+            Artifact(ref="initial_state", name="initial_state", content=_state_dump(initial_state))
+        )
     if final_state is not None:
-        artifacts.append(Artifact(ref="final_state", name="final_state", content=_state_dump(final_state)))
+        artifacts.append(
+            Artifact(ref="final_state", name="final_state", content=_state_dump(final_state))
+        )
     case_context = context.model_copy(deep=True)
-    case_context.references.append("Observed state artifact availability: " + _dump({
-        "initial_state_supplied": initial_state is not None, "final_state_supplied": final_state is not None}))
+    case_context.references.append(
+        "Observed state artifact availability: "
+        + _dump(
+            {
+                "initial_state_supplied": initial_state is not None,
+                "final_state_supplied": final_state is not None,
+            }
+        )
+    )
     # History is the earlier user/assistant interaction, not the current final response.
     if is_final and history and history[-1].role == "assistant":
         history = history[:-1]
-    return Case(request=request, history=history, response=response, events=events,
-                artifacts=artifacts, harness=harness, context=case_context,
-                evidence_complete=complete)
+    return Case(
+        request=request,
+        history=history,
+        response=response,
+        events=events,
+        artifacts=artifacts,
+        harness=harness,
+        context=case_context,
+        evidence_complete=complete,
+    )
 
 
 class _StateDesigner:
@@ -478,27 +632,50 @@ class _StateDesigner:
     def judge(self, name: str, prompt: str, payload: dict, schema):
         remaining = [r for r in payload["requirements"] if r != _STATE_REQUIREMENT]
         if self.client is None:
-            overlay = Overlay(coverage=[Coverage(requirement=r, covered_by=["base.result"], action="context")
-                                        for r in remaining],
-                              limitations=["Task conditions use baseline context; semantic calibration not run."])
+            overlay = Overlay(
+                coverage=[
+                    Coverage(requirement=r, covered_by=["base.result"], action="context")
+                    for r in remaining
+                ],
+                limitations=["Task conditions use baseline context; semantic calibration not run."],
+            )
         else:
             proposal_payload = {**payload, "requirements": remaining, "max_increments": 7}
-            proposal_prompt = prompt + "\nReserve one adapter-owned increment slot: propose at most seven increments."
-            overlay = Overlay.model_validate(self.client.judge(name, proposal_prompt, proposal_payload, schema).model_dump())
+            proposal_prompt = (
+                prompt
+                + "\nReserve one adapter-owned increment slot: propose at most seven increments."
+            )
+            overlay = Overlay.model_validate(
+                self.client.judge(name, proposal_prompt, proposal_payload, schema).model_dump()
+            )
             if len(overlay.increments) > 7:
-                raise AdaptationError("Environment adapter reserves one increment slot; designer limit is seven")
+                raise AdaptationError(
+                    "Environment adapter reserves one increment slot; designer limit is seven"
+                )
         if any(i.name == "environment.state_grounding" for i in overlay.increments):
             raise ValueError("Designer cannot replace fixed environment state evidence policy")
-        overlay.increments.append(Increment(name="environment.state_grounding", group="hallucination",
-            description="Ground environment mutation claims in supplied state snapshots",
-            prompt=_STATE_PROMPT, applicability="always"))
-        overlay.coverage.append(Coverage(requirement=_STATE_REQUIREMENT,
-            covered_by=["environment.state_grounding"], action="increment"))
+        overlay.increments.append(
+            Increment(
+                name="environment.state_grounding",
+                group="hallucination",
+                description="Ground environment mutation claims in supplied state snapshots",
+                prompt=_STATE_PROMPT,
+                applicability="always",
+            )
+        )
+        overlay.coverage.append(
+            Coverage(
+                requirement=_STATE_REQUIREMENT,
+                covered_by=["environment.state_grounding"],
+                action="increment",
+            )
+        )
         return overlay
 
 
-def build_task_pack(context: TaskContext, output: str | Path, baseline: LoadedPack | None = None,
-                    client=None) -> dict:
+def build_task_pack(
+    context: TaskContext, output: str | Path, baseline: LoadedPack | None = None, client=None
+) -> dict:
     """Freeze general checks plus local task context and the state-grounding increment."""
     context = context.model_copy(deep=True)
     if _STATE_REQUIREMENT not in context.constraints:
