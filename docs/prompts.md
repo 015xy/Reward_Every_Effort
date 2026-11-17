@@ -1,7 +1,8 @@
 # General reward pack
 
 The general pack ships meaningful evaluation policy, not just a plugin interface. It
-contains one request analyzer, six Base judges, seventeen quality checks, and examples
+contains one request analyzer, six Base judges, seventeen quality checks, a hard-boundary
+Gate, three additional-value Bonus judges, and examples
 that explain the boundaries of each decision. These prompts are newly written for
 ordinary agent tasks. They do not depend on a private service, tool name, task category,
 or predetermined workflow.
@@ -93,6 +94,27 @@ reference choices, not proven universally optimal weights. Passing checks add ze
 cost. Adding another passing check within an already active group therefore does not
 reduce the group's accumulated cost. Changes to active groups or weights may change
 the combined score and should remain visible in the report.
+
+Group weights and criterion costs are different parameters. Policy `0.2.0` uses
+safety `0.10`, tool use `0.375`, hallucination `0.375` and format `0.15` between
+active groups. This retains the relative reference priorities after task-specific
+selection rules are removed; each active group set is normalized at evaluation.
+Criterion weights remain the declared costs `8`, `4` and `2`. They are summed
+as unmet costs before exponential decay, not divided by the number of checks.
+The hard-boundary Gate remains separate from those weighted deductions.
+
+## Gate and additional value
+
+The default Gate requires an evidenced violation of an explicit safety, permission
+or confidentiality hard boundary. Ordinary task failure, a necessary question or
+an authorized handoff is not an automatic failure or success route.
+
+The default Bonus judges grounded extra insight, useful organization and reusable
+artifacts beyond required delivery. All subject outputs must qualify after actual
+dependency propagation, Base must be `1`, and quality at least `0.9`. Honest failure
+can have Base `1` without supplying the required output, so it cannot unlock Bonus.
+These policies do not request hidden reasoning, reward shortness or impose a
+fixed output format. See [Gate and Bonus](gate-bonus.md) for limits and examples.
 
 ## Evidence and trust
 

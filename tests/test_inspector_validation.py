@@ -2,13 +2,15 @@
 
 import json
 import math
+import re
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 from ree.evaluator import evaluate
-from ree.inspector import _validated_record
+from ree.inspector import _validated_record, render_reports
 from ree.judge import ReplayJudge
 from ree.models import Case
 
@@ -71,6 +73,34 @@ BAD_RECORDS = [
     {"status": "invalid", "case": {"subjects": [None]}},
     {"status": "invalid", "case": {"harness": {"tools": [{"parameters": []}]}}},
     {"status": "invalid", "case": {"context": {"examples": [None]}}},
+    {"status": "invalid", "metadata": {"display_query": True}},
+    {"status": "invalid", "metadata": {"display_query": 3}},
+    {"status": "invalid", "metadata": {"display_query": []}},
+    {"status": "invalid", "metadata": {"display_query": {}}},
+    {"status": "invalid", "metadata": {"display_reasoning": None}},
+    {"status": "invalid", "metadata": {"display_reasoning": []}},
+    {"status": "invalid", "metadata": {"display_reasoning": "Unmapped text"}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"request": "Not an assistant"}}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"history": "Not an assistant"}}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"absent": "Missing ref"}}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"response": None}}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"response": True}}},
+    {"status": "invalid", "metadata": {"display_reasoning": {"response": {}}}},
+    {
+        "status": "invalid",
+        "case": {"events": [{"ref": "system-note", "kind": "context"}]},
+        "metadata": {"display_reasoning": {"system-note": "Not an assistant"}},
+    },
+    {
+        "status": "invalid",
+        "case": {"events": [{"ref": "tool-output", "kind": "tool_result"}]},
+        "metadata": {"display_reasoning": {"tool-output": "Not an assistant"}},
+    },
+    {
+        "status": "invalid",
+        "case": {"artifacts": [{"ref": "file", "name": "File", "content": "Content"}]},
+        "metadata": {"display_reasoning": {"file": "Not an assistant"}},
+    },
 ]
 
 
@@ -140,3 +170,69 @@ def test_duplicate_scanner_ignores_strings_and_independent_objects():
 def test_valid_jsonl_preserves_nonfinite_error_instead_of_reporting_syntax():
     result = browser_results(['{"status":"invalid"}\n{"status":"ok","reward":1e999}'])[0]
     assert "import_number" in result["error"]
+
+
+@pytest.mark.parametrize("query", [None, "", " \n\t ", "A complete user query"])
+def test_display_metadata_preserves_originals_and_accepts_blank_fallbacks(query):
+    record = {
+        "status": "invalid",
+        "case": {
+            "request": "Complete request plus its original context",
+            "response": "A recorded answer",
+            "events": [
+                {"ref": "assistant-plan", "kind": "message", "content": "A recorded message"},
+                {"ref": "assistant-call", "kind": "tool_call", "tool": "read", "arguments": {}},
+            ],
+        },
+        "metadata": {
+            "display_query": query,
+            "display_reasoning": {
+                "assistant-plan": "An existing recorded thought",
+                "assistant-call": "An existing tool decision",
+                "response": "",
+            },
+        },
+    }
+    original = deepcopy(record)
+    validated = _validated_record(record)
+    assert record == original
+    assert validated["metadata"] == original["metadata"]
+    assert validated["case"] == original["case"]
+    result = browser_results([json.dumps(record)])[0]["records"][0]
+    assert result["metadata"] == original["metadata"]
+    assert result["case"] == original["case"]
+
+
+def test_display_metadata_has_no_implicit_defaults():
+    record = {"status": "invalid", "case": {"request": "Original request"}}
+    original = deepcopy(record)
+    result = _validated_record(record)
+    assert record == original
+    assert result["metadata"] == {}
+    assert "display_query" not in result["metadata"]
+    assert "display_reasoning" not in result["metadata"]
+    assert browser_results([json.dumps(record)])[0]["records"][0]["metadata"] == {}
+
+
+def test_html_exports_complete_display_text_without_changing_record(tmp_path):
+    text = 'Recorded text </script><script>alert("text")</script>\n__RECORD_JSON__ 你好'
+    record = {
+        "status": "invalid",
+        "case": {"request": "Original scoring request", "response": "Original response"},
+        "metadata": {"display_query": text, "display_reasoning": {"response": text}},
+    }
+    original = deepcopy(record)
+    paths = render_reports(record, tmp_path / "display.html")
+    assert record == original
+    for path in paths.values():
+        html = path.read_text()
+        embedded = re.search(
+            r'<script type="application/json" id="evaluation-record">(.*?)</script>',
+            html,
+            re.DOTALL,
+        )[1]
+        exported = json.loads(embedded)
+        assert exported["metadata"] == original["metadata"]
+        assert exported["case"] == original["case"]
+        assert '</script><script>alert("text")</script>' not in embedded
+        assert browser_results([embedded])[0]["records"][0]["metadata"] == original["metadata"]

@@ -36,6 +36,43 @@ Unscored `Case` inputs need evaluation first: run
 Inspector reports this distinction instead of inventing scores for raw trajectories.
 Imported data lives in the current page until it is closed or reloaded.
 
+## Display metadata
+
+Task adapters may add presentation information to a saved evaluation's metadata:
+
+```json
+{
+  "metadata": {
+    "display_query": "Update the timeout and verify it",
+    "display_reasoning": {
+      "msg-3": "Recorded reasoning for this assistant message",
+      "response": "Recorded reasoning for the final response"
+    }
+  }
+}
+```
+
+`display_query` is an optional string or null. A nonblank value supplies the
+query list, its tooltip, the selected query heading and query search. Missing,
+null or whitespace-only values fall back to `case.request`. Adapters choose the
+source query explicitly; the generic Inspector does not parse task-specific
+wrappers. It preserves the complete original `case.request` in the trajectory,
+including all text used by the evaluator and its `request` evidence reference.
+
+`display_reasoning` is an optional object containing only already supplied text.
+Each value must be a string; each key must be `response` or the ref of an existing
+`case.events` entry whose kind is `message` or `tool_call`. The example's `msg-3`
+must therefore exist as an assistant event. Request, history, system context,
+tool results and artifacts cannot be reasoning targets. A missing mapping adds
+no reasoning; the Inspector does not infer, recover or generate hidden content.
+
+These fields remain outside `Case` and all judge inputs. They do not change
+reward facts, scoring policy, cache identities or exact evidence anchors, and
+they are not additional scored evidence. Validation, HTML export and JSON
+import/export preserve their complete original values without normalizing or
+rewriting the saved record. Do not copy a display field into scoring input when
+adapting a task.
+
 ## One reward flow
 
 Each selected record has one **Gate → Base → Deduct / Bonus → final reward**
@@ -64,6 +101,34 @@ Missing, invalid, deferred, and not-applicable states remain distinct. An invali
 evaluation has no usable training scalar. Older records without Gate, Bonus, or
 composition fields display “Not recorded”; the Inspector does not infer a policy
 or reconstruct missing values. Other completed judgements remain inspectable.
+
+### Reading deduction calculations
+
+Each quality criterion has a score and an unmet-cost weight. These are separate
+from the weight assigned to its quality group:
+
+| Quantity | Meaning |
+|---|---|
+| Criterion score `s_i` | Observed pass/fail (`1`/`0`) or a declared fractional score |
+| Criterion weight `w_i` | Cost of completely failing this criterion |
+| Criterion cost `c_i` | `w_i × (1 − s_i)` for a completed applicable check |
+| Group cost `C_g` | Sum of that group's criterion costs |
+| Group score `q_g` | Group cost converted through the declared exponential curve |
+| Group weight `W_g` | This group's relative influence on combined quality |
+| Combined quality `Q` | `sum(W_g × q_g) / sum(W_g)` over active groups |
+| Deduction `D` | `deduction_max × (1 − Q)` |
+
+For example, four checks with weights `2, 2, 2, 4` and scores `1, 0, 1, 1`
+produce individual costs `0, 2, 0, 0` and group cost `2`. With `H=8` and
+`C_max=32`, the group's score is about `0.8303`. Its influence on combined
+quality then depends on its group weight and the other active groups.
+
+The criterion table exposes each step and its evidence; filtering visible rows
+does not change the recorded group total. The group aggregation table exposes
+each weighted contribution before combined quality becomes a deduction. The
+exponential formula and parameters remain available as expandable details.
+Not-applicable checks are excluded; missing evidence, failed execution and
+unrecorded values remain unresolved, rather than appearing as zero-cost passes.
 
 ## Trace annotations
 

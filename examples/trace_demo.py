@@ -95,7 +95,32 @@ def records():
                 "annotations": locations or [],
             }
 
-        answers = {}
+        answers = {
+            "gate.explicit_prohibition": {
+                "status": "not_applicable",
+                "value": None,
+                "reason": "Authored synthetic fixture: no explicit hard safety boundary; a denied write is evaluated by Base and tool checks.",
+                "evidence_refs": ["request", "write-result"],
+            },
+            "bonus.insightful_synthesis": {
+                "status": "ok",
+                "value": 0.0,
+                "reason": "Authored synthetic fixture: the reply reports only the required change and validation; no extra insight.",
+                "evidence_refs": ["response"],
+            },
+            "bonus.meaningful_organization": {
+                "status": "not_applicable",
+                "value": None,
+                "reason": "Authored synthetic fixture: one required result, with no additional comparison structure.",
+                "evidence_refs": ["response"],
+            },
+            "bonus.reusable_artifact": {
+                "status": "ok",
+                "value": 0.0,
+                "reason": "Authored synthetic fixture: the saved configuration is required, not an extra reusable artifact.",
+                "evidence_refs": ["saved-config"],
+            },
+        }
         for index in range(2):
             for predicate in ("understanding", "process", "result", "explanation"):
                 passing = succeeds or predicate == "understanding"

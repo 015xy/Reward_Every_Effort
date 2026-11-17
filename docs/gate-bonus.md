@@ -2,10 +2,14 @@
 
 The runtime records the complete `Gate → Base → Deduct / Bonus → reward`
 computation. Gate and Bonus are executable policies with immutable prompts,
-declared configuration and evidence-bearing judgements. The general pack ships
-one reusable example of each, both disabled by default. Ordinary evaluation
-therefore admits the case, computes Base and quality deductions, and records
-`bonus = 0` without making extra model calls.
+declared configuration and evidence-bearing judgements. General pack `0.2.0`
+enables one hard-boundary Gate and three general Bonus policies by default.
+The Gate judges an actual violation; an eligible Bonus judges actual additional
+value. No rule infers success from a routing decision or rewards length.
+
+Packs frozen under `0.1.0` retain their earlier disabled reference policies.
+Regrade with a new pack to evaluate new policies; recompute cannot invent facts
+for rules that were previously disabled or skipped.
 
 ## Gate: explicit routing before scoring
 
@@ -20,10 +24,13 @@ enabled Bonus policies are recorded as `not_run`, with a reason explaining the
 short circuit. Base, deduction and Bonus remain `null`; the evaluator never
 fabricates zero-valued downstream scores. Disabled policies retain `disabled`.
 
-The reference `gate.explicit_prohibition` checks actual violations of explicit
-hard prohibitions in trusted instructions or context. Ordinary task failure,
-format mistakes, long answers and hypothetical dangers are insufficient to
-trigger it. Read its prompt before enabling it for a task.
+The default `gate.explicit_prohibition` checks actual violations of explicit
+safety, authorization or confidentiality hard boundaries in trusted instructions
+or context. Ordinary task failure, workflow requirements, formatting conventions,
+long answers and hypothetical dangers are insufficient to trigger it. Necessary
+clarification, authorized handoff and honest external failure remain on the normal
+Base path. Missing evidence is invalid evaluation, not a successful route or an
+agent reward of zero. Read the prompt when configuring a task's boundaries.
 
 ```json
 {
@@ -55,16 +62,27 @@ score to an honest, well-handled external failure. That score does not establish
 successful delivery, and it cannot by itself unlock extra credit. Empty-subject
 conversations also do not qualify under this reference policy.
 
-The reference `bonus.reusable_artifact` credits a useful reusable artifact beyond
-the required deliverable. It does not reward length, unnecessary work or a claim
-that an artifact exists. Enable it only when the task benefits from that policy.
+The default policies require three distinct observable benefits beyond required
+delivery. Each prompt excludes the same benefit already credited by another policy:
+
+| Policy | Maximum | Additional value |
+|---|---:|---|
+| `bonus.insightful_synthesis` | 0.04 | Grounded extra conclusions or tradeoffs that reduce decision work |
+| `bonus.meaningful_organization` | 0.03 | Useful relationships or comparisons beyond the required structure |
+| `bonus.reusable_artifact` | 0.03 | An actually supplied, correct reusable artifact beyond required outputs |
+
+No fixed business format, entity count, group size or word threshold is required.
+An analysis, grouping or artifact explicitly requested by the user belongs to
+Base, rather than earning extra credit for the same work. With no relevant extra
+value a rule grants zero or returns `not_applicable`; it never invents a need for
+extra work. Hidden reasoning, length and unsupported promises earn no credit.
 
 ```json
 {
   "name": "bonus.reusable_artifact",
   "prompt": "bonus/reusable_artifact.md",
   "description": "Credit useful reusable artifacts beyond required delivery",
-  "max_value": 0.1,
+  "max_value": 0.03,
   "min_base": 1.0,
   "min_quality": 0.9,
   "require_all_subjects": true,
@@ -73,7 +91,7 @@ that an artifact exists. Enable it only when the task benefits from that policy.
 ```
 
 An eligible judge returns `value` in `[0, 1]`. This is the fraction of the rule's
-maximum, so `value = 0.5` with `max_value = 0.1` grants `0.05`. The runtime sums
+maximum, so `value = 0.5` with `max_value = 0.03` grants `0.015`. The runtime sums
 grants and caps the sum at `profile.bonus_max`. `not_applicable` grants zero;
 `missing_evidence` or `error` makes the enabled, eligible Bonus and reward
 invalid. Ineligible policies are not judged.
@@ -81,7 +99,16 @@ invalid. Ineligible policies are not judged.
 Normal reward is `clip(base - deduction + bonus, reward_min, reward_max)`. For
 example, Base `1`, deduction `0.08` and Bonus `0.05` produce `0.97`. A Bonus at an
 already perfect reward remains visible in the record but clipping prevents the
-training reward from exceeding `1`.
+training reward from exceeding `1`. Turning Bonus on therefore does not by itself
+distinguish two perfect, deduction-free rewards. Extra-credit facts and clipping
+remain inspectable; changing that ceiling or reserving reward headroom is a
+separate numerical policy and experimental question.
+With the default Base threshold `1`, quality threshold `0.9` and deduction maximum
+`0.8`, an eligible record has deduction at most `0.08`. Bonus can recover that
+deduction up to reward `1`; extra raw grants above the available headroom are
+clipped. Three independent judges do not provide automatic cross-rule deduplication:
+each prompt requires a distinct extra benefit and evidence, and excludes value
+already credited under another rule.
 
 `bonus_details.checks` retains eligibility, reasons, evidence, judge values and
 each granted amount. `uncapped`, `cap` and `capped` distinguish the raw sum from

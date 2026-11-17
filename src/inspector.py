@@ -166,6 +166,25 @@ def _validated_record(record: dict[str, Any]) -> dict[str, Any]:
     _list_field(context, "examples", "case.context.examples", objects=True)
     _object_field(context, "harness", "case.context.harness")
     _object_field(context, "output_schema", "case.context.output_schema", nullable=True)
+    metadata = result["metadata"]
+    query = metadata.get("display_query")
+    if query is not None and not isinstance(query, str):
+        raise ValueError("Evaluation record metadata.display_query must be a string or null")
+    reasoning = _object_field(metadata, "display_reasoning", "metadata.display_reasoning")
+    assistant_refs = {"response"}
+    assistant_refs.update(
+        event["ref"]
+        for event in case.get("events", [])
+        if event.get("kind") in ("message", "tool_call") and isinstance(event.get("ref"), str)
+    )
+    for ref, text in reasoning.items():
+        if not isinstance(ref, str) or ref not in assistant_refs:
+            raise ValueError(
+                "Evaluation record metadata.display_reasoning may target only response "
+                "or observed assistant message/tool-call refs"
+            )
+        if not isinstance(text, str):
+            raise ValueError(f"Evaluation record metadata.display_reasoning.{ref} must be a string")
     return result
 
 

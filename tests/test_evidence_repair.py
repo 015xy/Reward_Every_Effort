@@ -52,6 +52,19 @@ def fixture():
         for name in ["understanding", "process", "result", "explanation"]
     }
     responses.update({f"criterion/{rule.name}": judgement() for rule in pack.manifest.criteria})
+    responses["gate.explicit_prohibition"] = {
+        "status": "not_applicable",
+        "value": None,
+        "reason": "Authored test fixture: no explicit hard safety boundary.",
+        "evidence_refs": [],
+    }
+    for rule in pack.manifest.bonuses:
+        responses[rule.name] = {
+            "status": "ok",
+            "value": 0.0,
+            "reason": "Authored test fixture: no extra value beyond the required answer.",
+            "evidence_refs": [],
+        }
     return pack, case, responses
 
 
@@ -230,8 +243,13 @@ def test_real_transport_repair_uses_existing_call_budget_and_usage_scope(max_cal
             client,
             pack,
             plugins={
-                rule.name: lambda _case: Judgement.model_validate(judgement())
-                for rule in pack.manifest.criteria
+                "gate.explicit_prohibition": lambda _case: Judgement(
+                    status="not_applicable", reason="Synthetic greeting has no hard safety boundary"
+                ),
+                **{
+                    rule.name: lambda _case: Judgement.model_validate(judgement())
+                    for rule in pack.manifest.criteria
+                },
             },
         )
         assert len(requests) == client._calls == max_calls

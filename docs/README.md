@@ -2,7 +2,8 @@
 
 General-purpose, evidence-based rewards for agent trajectories. The default pack
 contains a working Labeler, task-completion judgements, the six-row Base table,
-17 quality criteria, exponential aggregation, and a standalone interactive Inspector.
+17 quality criteria, exponential aggregation, a hard-boundary Gate, three
+additional-value Bonus policies, and a standalone interactive Inspector.
 Provide a request and observed trajectory; task-specific rubrics are optional.
 
 ## Quick start
@@ -79,7 +80,9 @@ base       = mean(task scores)
 
 Quality gaps from safety, tool use, hallucination and format yield weighted costs.
 Each group uses the endpoint-normalized exponential `2^(-cost/H)`, then active
-groups are averaged and deducted from Base. Empty applicable groups are excluded;
+groups are weighted and deducted from Base. The reference group weights are
+safety `0.10`, tool use `0.375`, hallucination `0.375` and format `0.15`;
+criterion weights remain their separate `8/4/2` costs. Empty applicable groups are excluded;
 no applicable groups means quality=1. Errors and missing evidence produce an
 **invalid evaluation with reward=null**, never an implicit training reward of zero.
 The reference profile uses H=8, max_cost=32, deduction_max=0.8 and [0.1,1] clipping.
@@ -163,6 +166,10 @@ separate experiments. See [architecture](architecture.md),
 This local implementation covers the default evaluation/adaptation/inspection
 path. Automatic container synthesis, arbitrary actor execution, multimodal parsers,
 and benchmark integrations are extension work. [Gate and Bonus](gate-bonus.md)
-include working rules and general reference prompts. Their reference rules are
-disabled by default: enabling a short circuit or extra credit is an explicit
-frozen-pack policy choice. They do not silently grant length-based bonuses.
+include working rules and general prompts enabled in policy `0.2.0`. The Gate
+routes only evidenced violations of explicit safety, permission or confidentiality
+hard boundaries. Bonus evaluates grounded extra insight, useful organization and
+reusable artifacts beyond required delivery after successful task qualification.
+There are no length-based bonuses. Earlier frozen packs keep their original policy;
+new evaluation facts require regrade. Bonus at an already perfect reward remains
+visible but cannot exceed the reward ceiling of `1`.

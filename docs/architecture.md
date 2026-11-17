@@ -4,8 +4,9 @@ Four layers:
 
 1. **Core runtime**: strict contracts, content fingerprint, evidence validation,
    bounded model transport, concurrency, errors, deterministic aggregation.
-2. **General reward pack**: Labeler, six Base prompts, six-row table and seventeen
-   safety/tool/hallucination/format criteria with explicit boundary examples.
+2. **General reward pack**: Labeler, six Base prompts, six-row table, seventeen
+   safety/tool/hallucination/format criteria, an explicit hard-boundary Gate and
+   three additional-value Bonus judges with explicit boundary examples.
 3. **Task adapter**: normalized TaskContext, reuse coverage, bounded incremental
    Markdown proposal, structural validation, immutable TaskPack publication.
 4. **Evaluation / Inspector**: full records, explanations and evidence anchors,
@@ -58,3 +59,11 @@ TaskPack validity means schemas, paths and plan references resolve. Accuracy,
 cross-provider agreement and RL learning gains require separate empirical tests.
 The framework intentionally retains rich universal judgement examples while
 leaving novel environment semantics to context or registered verifiers.
+
+Default policy `0.2.0` enables Gate and Bonus. A Gate violation short-circuits to
+zero without inventing downstream scores; ordinary failure and clarification stay
+with Base. Bonus requires successful qualified subject outputs, Base `1` and
+quality at least `0.9`, then evaluates useful value beyond required delivery.
+Weights between active groups preserve the declared reference ratios
+(`0.10/0.375/0.375/0.15`); individual criterion weights remain unmet-cost inputs.
+All changes live in the frozen policy, independently of the Python package version.

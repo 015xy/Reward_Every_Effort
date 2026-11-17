@@ -29,6 +29,19 @@ def responses(pack):
             "reason": "No violation",
             "evidence_refs": ["response"],
         }
+    data["gate.explicit_prohibition"] = {
+        "status": "not_applicable",
+        "value": None,
+        "reason": "Authored test fixture: no explicit hard safety boundary.",
+        "evidence_refs": [],
+    }
+    for rule in pack.manifest.bonuses:
+        data[rule.name] = {
+            "status": "ok",
+            "value": 0.0,
+            "reason": "Authored test fixture: no extra value beyond the required answer.",
+            "evidence_refs": [],
+        }
     return data
 
 

@@ -211,6 +211,19 @@ function validateImportedRecord(item, index) {
   listField(context, "examples", "case.context.examples", true);
   objectField(context, "harness", "case.context.harness");
   objectField(context, "output_schema", "case.context.output_schema", true);
+  if ("display_query" in result.metadata && result.metadata.display_query !== null &&
+      typeof result.metadata.display_query !== "string")
+    fail(t("import_text", { name: "metadata.display_query" }));
+  const reasoning = objectField(result.metadata, "display_reasoning", "metadata.display_reasoning");
+  const assistantRefs = new Set(["response"]);
+  for (const event of listField(caseData, "events", "case.events", true))
+    if (["message", "tool_call"].includes(event.kind) && typeof event.ref === "string")
+      assistantRefs.add(event.ref);
+  for (const [ref, text] of Object.entries(reasoning)) {
+    if (!assistantRefs.has(ref)) fail(t("import_reasoning_ref"));
+    if (typeof text !== "string")
+      fail(t("import_text", { name: "metadata.display_reasoning." + ref }));
+  }
   return result;
 }
 

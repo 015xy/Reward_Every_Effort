@@ -97,8 +97,13 @@ def test_evaluator_repaired_cache_regrades_without_another_repair_request(tmp_pa
         )
 
     plugins = {
-        rule.name: lambda _: Judgement(status="ok", value=True, reason="Synthetic verifier")
-        for rule in pack.manifest.criteria
+        "gate.explicit_prohibition": lambda _: Judgement(
+            status="not_applicable", reason="Synthetic greeting has no hard safety boundary"
+        ),
+        **{
+            rule.name: lambda _: Judgement(status="ok", value=True, reason="Synthetic verifier")
+            for rule in pack.manifest.criteria
+        },
     }
     client = transport_client(tmp_path, handler)
     try:
