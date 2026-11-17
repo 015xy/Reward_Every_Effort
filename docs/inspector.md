@@ -132,9 +132,11 @@ unrecorded values remain unresolved, rather than appearing as zero-cost passes.
 
 ## Trace annotations
 
-Evidence buttons open and scroll the corresponding recorded message, event, or
-artifact in the trajectory pane. System context and lengthy tool details are
-collapsible. An optional judgement annotation can identify a precise location:
+Each judgement has one **View evidence** button. It expands all referenced
+messages, events or artifacts together, and focuses a recorded issue before
+supporting evidence. System context, recorded reasoning and tool details are
+collapsible. Display-only reasoning is never registered as scoring evidence.
+An optional judgement annotation can identify a precise location:
 
 ```json
 {
@@ -145,14 +147,14 @@ collapsible. An optional judgement annotation can identify a precise location:
 }
 ```
 
-`kind: "issue"` draws a solid red boundary around the problem location;
-`kind: "support"` draws a dashed boundary around supporting evidence. An exact
-`quote` highlights matching original text, and the annotation reason appears
-beside the trace. The evaluator validates references and exact quotes against
-observed text. Selecting a deduction prioritizes the issue location for focus.
+`kind: "issue"` marks the problem location and matching quote in red;
+`kind: "support"` marks supporting evidence in yellow. Overlapping issue and
+support quotes use the issue color. The annotation reason appears beside the
+trace. The evaluator validates references and exact quotes against observed
+text. Text supplied only for display never receives evidence highlighting.
 
-A plain `evidence_refs` citation remains **related evidence**. It never becomes
-an issue annotation solely because the criterion lost points.
+A plain `evidence_refs` citation remains yellow **related evidence**. It never
+becomes an issue annotation solely because the criterion lost points.
 
 ## Responsive and offline behavior
 
